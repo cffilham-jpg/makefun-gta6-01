@@ -1,134 +1,313 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
-//
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { stageShot } from './shots.js';
+// Solmere Heat — bootstrap and game loop. One SolmereHeat instance owns
+// the renderer, the scene and every subsystem (city, player, cars, police,
+// missions, combat, weapons, HUD, audio, input). It also owns the menus:
+// the start screen, pause, help, mission cards and the death screen.
+// The loop runs at the browser's frame rate with a clamped delta; menus
+// freeze the simulation but keep rendering the city behind them.
+import * as THREE from 'three';
+import { Input } from './input.js';
+import { City } from './city.js';
+import { Player } from './player.js';
+import { Vehicles } from './vehicles.js';
+import { Traffic } from './traffic.js';
+import { Pedestrians } from './pedestrians.js';
+import { Police } from './police.js';
+import { Missions } from './missions.js';
+import { Combat } from './combat.js';
+import { Weapons } from './weapons.js';
+import { HUD } from './hud.js';
+import { Audio } from './audio.js';
+import { load, save, restore } from './save.js';
+import { makeRng } from './utils.js';
+import { setupShot } from './shots.js';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
-const MAX_FRAME = 0.25;
+class SolmereHeat {
+  constructor() {
+    this.mode = 'menu';
+    this.time = 0;
+    this.shake = 0;
+    this.particles = [];
+    this.unlocked = [];
+    this.rng = makeRng(Number(new URLSearchParams(location.search).get('seed')) || 42);
 
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
+    // Renderer: golden-hour fog, soft shadows, filmic tone mapping.
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.Fog('#e5bfa0', 120, 440);
+    this.camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1200);
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: document.getElementById('world'),
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
 
-const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
-const renderer = createRenderer(canvas);
+    this.scene.add(new THREE.HemisphereLight('#b7d9de', '#9a7459', 2));
+    const sun = new THREE.DirectionalLight('#ffe1af', 3);
+    sun.position.set(-100, 150, -100);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -160, right: 160, top: 160, bottom: -160, near: 1, far: 500 });
+    sun.shadow.bias = -0.0004;
+    this.scene.add(sun);
+    this.sun = sun;
 
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
+    // Subsystems, in dependency order.
+    this.input = new Input(this.renderer.domElement);
+    this.audio = new Audio();
+    this.city = new City(this);
+    this.player = new Player(this);
+    this.vehicles = new Vehicles(this);
+    this.traffic = new Traffic(this);
+    this.pedestrians = new Pedestrians(this);
+    this.police = new Police(this);
+    this.missions = new Missions(this);
+    this.weapons = new Weapons(this);
+    this.combat = new Combat(this);
+    this.hud = new HUD(this);
+
+    this.last = performance.now();
+    this.autosave = 0;
+    this.player.camera(1, true);
+    this.startMenu();
+    setupShot(this);
+    addEventListener('resize', () => {
+      this.renderer.setSize(innerWidth, innerHeight);
+      this.camera.aspect = innerWidth / innerHeight;
+      this.camera.updateProjectionMatrix();
+    });
+    window.game = this;
+    requestAnimationFrame((t) => this.frame(t));
   }
-}
 
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
-  }
-}
-
-function runShot(name) {
-  const scene = stageShot(name, world);
-  let painted = 0;
-  function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
-}
-
-function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
-  let accumulator = 0;
-  let last = performance.now();
-
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
+  // Show a full-screen menu card (start, pause, mission, death).
+  showOverlay(eyebrow, title, text, buttons) {
+    this.mode = 'menu';
+    this.input.clear();
+    document.exitPointerLock?.();
+    document.getElementById('menuEyebrow').textContent = eyebrow;
+    const titleEl = document.getElementById('menuTitle');
+    titleEl.innerHTML = '';
+    titleEl.textContent = title;
+    document.getElementById('menuText').textContent = text;
+    const buttonBox = document.getElementById('menuButtons');
+    buttonBox.replaceChildren();
+    for (const [name, action, disabled] of buttons) {
+      const button = document.createElement('button');
+      button.textContent = name;
+      button.disabled = !!disabled;
+      button.onclick = () => {
+        this.audio.init();
+        this.audio.tone(620, 0.06, 'triangle', 0.2);
+        action();
+      };
+      buttonBox.append(button);
     }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
+    document.getElementById('overlay').classList.add('visible');
   }
 
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
+  // The start screen: story, free roam, continue (when a save exists),
+  // and the field guide.
+  startMenu() {
+    const stored = load();
+    this.showOverlay(
+      'AN ORIGINAL OPEN-WORLD CRIME STORY',
+      'SOLMERE HEAT',
+      'A city of golden promises. A driver with nothing to lose.\nExplore the coast. Build a reputation. Make your own escape.',
+      [
+        ['Start Story', () => this.newGame(true)],
+        ['Free Roam', () => this.newGame(false)],
+        [
+          'Continue',
+          () => {
+            this.resetRun();
+            restore(this, stored);
+            this.resume();
+            if (this.missions.index < 5) this.hud.message('J • continue the next chapter');
+          },
+          !stored,
+        ],
+        ['How to Play', () => this.help()],
+      ]
+    );
+    document.getElementById('menuTitle').innerHTML = 'SOLMERE<br><em>HEAT</em>';
+  }
+
+  // The controls card.
+  help() {
+    this.showOverlay(
+      'FIELD GUIDE / SOLMERE',
+      'YOUR CITY. YOUR RULES.',
+      'WASD move / drive · Mouse look (click to lock)\nE enter / exit · Shift sprint · Space jump / handbrake\nLeft mouse fire · F punch · R reload · 1–4 / wheel switch\nHold RMB: SV-9 sniper scope · M mute · Esc pause\nFind the gold rifle crate by Reyes Auto, west of your first car.\nGreen garage clears heat. J starts the next story chapter.\nHealth and ammo crates are scattered through the city.',
+      [['Back', () => this.startMenu()]]
+    );
+  }
+
+  // Reset Danny alone (respawn): back on foot at the safehouse, healthy,
+  // briefly invulnerable, heat cleared.
+  resetPlayer() {
+    if (this.player.car) this.player.car = null;
+    this.player.mesh.visible = true;
+    this.player.p.set(7, 0, 30);
+    this.player.hp = 100;
+    this.player.yaw = Math.PI;
+    this.player.pitch = 0.05;
+    this.player.invulnerable = 3;
+    this.police.clear();
+    this.shotCamera = null;
+  }
+
+  // Reset the whole run: player, missions, weapons, enemies, cars.
+  resetRun() {
+    this.resetPlayer();
+    this.missions.active = false;
+    this.missions.target = null;
+    this.missions.marker.visible = false;
+    this.missions.timer = 0;
+    this.weapons.index = 0;
+    this.weapons.reloadLeft = 0;
+    this.weapons.scoped = false;
+    this.weapons.list.forEach((weapon, i) => {
+      weapon.ammo = weapon.mag;
+      weapon.reserve = i === 0 ? 180 : i === 1 ? 240 : i === 2 ? 48 : 25;
+      weapon.unlocked = i < 3;
+    });
+    for (const enemy of this.combat.enemies) this.scene.remove(enemy.mesh);
+    this.combat.enemies = [];
+    this.unlocked = [];
+    this.vehicles.all.forEach((car) => {
+      car.hp = 100;
+      car.speed = 0;
+      car.stolen = false;
+    });
+  }
+
+  // Start a fresh run: story mode opens the first briefing, free roam
+  // drops Danny straight into the city.
+  newGame(story) {
+    this.resetRun();
+    this.player.cash = 250;
+    this.missions.index = 0;
+    this.missions.active = false;
+    this.missions.target = null;
+    this.missions.marker.visible = false;
+    this.missions.objective = 'Free roam • explore Solmere / J to start the story';
+    this.resume();
+    this.hud.message('Welcome home, Danny • E to take the coupe beside you');
+    if (story) this.missions.start();
+  }
+
+  // Back to playing from any menu.
+  resume() {
+    this.mode = 'play';
+    document.getElementById('overlay').classList.remove('visible');
+    this.input.clear();
+  }
+
+  // The pause menu.
+  pause() {
+    this.showOverlay('TAKE A BREATHER', 'PAUSED', 'Solmere can wait.', [
+      ['Resume', () => this.resume()],
+      [
+        'Save Game',
+        () => {
+          this.persist();
+          this.resume();
+        },
+      ],
+      ['Restart Job', () => this.missions.begin(), !this.missions.active],
+      [
+        'Main Menu',
+        () => {
+          this.persist();
+          this.startMenu();
+        },
+      ],
+    ]);
+  }
+
+  persist() {
+    save(this);
+  }
+
+  // Danny is out (wasted or busted): offer a respawn at the hospital
+  // (with a $150 fee) or the main menu.
+  die(title, message) {
+    const wasActive = this.missions.active;
+    this.missions.active = false;
+    this.missions.marker.visible = false;
+    this.missions.target = null;
+    this.showOverlay('SOLMERE MEDICAL / 24 HOURS', title, message, [
+      [
+        'Respawn',
+        () => {
+          this.resetPlayer();
+          this.player.p.set(-13, 0, -28);
+          this.player.cash = Math.max(0, this.player.cash - 150);
+          this.resume();
+          this.missions.objective = wasActive ? 'Job failed • J to retry' : 'Free roam • J for the story';
+        },
+      ],
+      ['Main Menu', () => this.startMenu()],
+    ]);
+  }
+
+  // One simulation step: the world first, then (only while playing) the
+  // player's systems, autosave and particles.
+  update(dt) {
+    this.time += dt;
+    this.shake = Math.max(0, this.shake - dt * 2);
+    this.player.update(dt);
+    this.vehicles.update(dt);
+    this.traffic.update(dt);
+    this.pedestrians.update(dt);
+    this.police.update(dt);
+    if (this.mode !== 'play') return;
+    this.weapons.update(dt);
+    this.combat.update(dt);
+    this.missions.update(dt);
+    this.autosave += dt;
+    if (this.autosave > 30) {
+      this.autosave = 0;
+      this.persist();
     }
-  }
-
-  function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
-    }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
-  }
-
-  function frame(now) {
-    requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
-    last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
-        accumulator -= STEP;
+    for (const particle of this.particles) {
+      particle.life -= dt;
+      particle.mesh.position.addScaledVector(particle.velocity, dt);
+      if (particle.velocity.lengthSq() > 0) particle.velocity.y -= dt * 10;
+      if (particle.life <= 0) {
+        this.scene.remove(particle.mesh);
+        particle.mesh.geometry?.dispose();
       }
-    } else {
-      accumulator = 0;
     }
-    renderer.draw(world.state, screen, best);
+    this.particles = this.particles.filter((particle) => particle.life > 0);
   }
 
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
+  // One rendered frame: global keys (pause, mute), the simulation step
+  // (frozen for screenshot scenes), then camera, HUD and the render.
+  frame(t) {
+    const dt = Math.min(0.05, (t - this.last) / 1000);
+    this.last = t;
+    if (this.input.tap('Escape')) {
+      if (this.mode === 'play') this.pause();
+      else if (document.getElementById('menuTitle').textContent === 'PAUSED') this.resume();
     }
-  });
-
-  announce('Block Dodger. Press Space or click to start.');
-  requestAnimationFrame(frame);
+    if (this.input.tap('KeyM')) {
+      this.audio.toggle();
+      this.hud.message(this.audio.muted ? 'Sound muted' : 'Sound on');
+    }
+    if (this.mode === 'play' && !this.shotFrozen) this.update(dt);
+    this.player.camera(dt);
+    this.hud.update(dt);
+    this.renderer.render(this.scene, this.camera);
+    this.input.end();
+    requestAnimationFrame((next) => this.frame(next));
+  }
 }
 
-if (shot) runShot(shot);
-else runGame();
+new SolmereHeat();

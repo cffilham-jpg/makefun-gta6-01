@@ -1,19 +1,80 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183c42">
+  <title>SOLMERE HEAT — an original open world</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {"imports": {"three": "./vendor/three.module.min.js"}}
+  </script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+  <canvas id="world" aria-label="Solmere Heat 3D game"></canvas>
+  <div id="grain"></div>
+
+  <div id="hud">
+    <header>
+      <div class="brand">SOLMERE<span>HEAT</span><small id="district">PALM AVENUE / 18:42</small></div>
+      <div id="finance">
+        <div id="cash">$250</div>
+        <div id="stars">☆☆☆☆☆</div>
+        <small id="heatstate">KEEP A LOW PROFILE</small>
+      </div>
+    </header>
+
+    <div id="objective">
+      <small id="chapter">DANNY REYES / FREE ROAM</small>
+      <div id="objectiveText"></div>
+      <span id="timer"></span>
+    </div>
+
+    <div id="mapFrame">
+      <div class="mapTitle"><span>SOLMERE</span><span>N ↑</span></div>
+      <canvas id="map" width="200" height="180"></canvas>
+      <div class="health"><div id="healthFill"></div></div>
+      <div class="mapTitle"><span id="healthText">HEALTH 100</span><span id="saveStatus">OFFLINE / LOCAL</span></div>
+    </div>
+
+    <div id="feed"></div>
+
+    <div id="rightHud">
+      <div id="speed"><strong>000</strong><span>KM/H</span><small id="carName"></small></div>
+      <div id="weapon">
+        <span id="weaponIcon"></span>
+        <small id="weaponName"></small>
+        <strong id="ammo"></strong>
+        <span id="reload"></span>
+      </div>
+    </div>
+
+    <div id="crosshair"><i></i><b></b></div>
+    <div id="hitmarker"></div>
+    <div id="hitfeedback"></div>
+    <div id="hint">WASD move / drive · E enter / exit · Shift sprint · Space jump / handbrake · 1–4 weapons · RMB scope · R reload · Esc pause</div>
+  </div>
+
+  <div id="scope">
+    <div class="scopeReticle">
+      <i></i><b></b>
+      <span class="mildots">•　•　•　　•　•　•</span>
+      <span class="scopeData">SV-9 / DEADEYE<br>6× PRECISION OPTIC</span>
+    </div>
+  </div>
+  <div id="damage"></div>
+
+  <div id="overlay" class="visible">
+    <div class="menuCard">
+      <div id="menuEyebrow">AN ORIGINAL OPEN-WORLD CRIME STORY</div>
+      <h1 id="menuTitle">SOLMERE<br><em>HEAT</em></h1>
+      <p id="menuText">A city of golden promises.<br>A driver with nothing to lose.</p>
+      <div id="menuButtons"></div>
+      <footer>DANNY REYES · SOLMERE COAST · 2026 <span>ALL ART &amp; SOUND PROCEDURAL</span></footer>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,41 +1,42 @@
-// A working gta6-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in. It copies game/ and
-// screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the
-// judge reads, with the vendored make.fun library. Only the plumbing, not an open world: Block
-// Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
-// title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
-// your own open-world crime game in its place (three.js or any library you vendor under game/),
-// put your 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
-//
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Entry point for the gta6-01 grader: package the game for judging.
+// Copies game/ and screenshots/ from this repository into the output
+// directory (or $MAKEFUN_OUTPUT_DIR outside the grader) and writes
+// dossier.json with the kit's buildDossier. Runs twice and must write
+// identical bytes both times, so every file list is sorted and nothing
+// here depends on the clock, the environment or traversal order.
+import { readdirSync, mkdirSync, copyFileSync, writeFileSync, rmSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoRoot = dirname(fileURLToPath(import.meta.url));
+const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR || '/output');
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+// Copy a directory tree, entries in sorted order, regular files only.
+function copyTree(sourceDir: string, targetDir: string): void {
+  mkdirSync(targetDir, { recursive: true });
+  const entries = readdirSync(sourceDir, { withFileTypes: true }).sort((left, right) =>
+    left.name.localeCompare(right.name, 'en')
+  );
+  for (const entry of entries) {
+    const from = join(sourceDir, entry.name);
+    const to = join(targetDir, entry.name);
+    if (entry.isDirectory()) copyTree(from, to);
+    else if (entry.isFile()) copyFileSync(from, to);
+    else throw new Error(`refusing to package non-regular entry: ${from}`);
+  }
+}
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+mkdirSync(outDir, { recursive: true });
+for (const folder of ['game', 'screenshots']) {
+  rmSync(join(outDir, folder), { recursive: true, force: true });
+  copyTree(join(repoRoot, folder), join(outDir, folder));
+}
+
+const dossier = buildDossier(outDir, {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+});
+writeFileSync(join(outDir, 'dossier.json'), dossier);

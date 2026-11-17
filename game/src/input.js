@@ -1,53 +1,79 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard + mouse state for Solmere Heat. One Input instance owns every
+// listener; the game loop reads it through down()/tap() and calls end()
+// once a frame to clear the per-frame edges (fresh presses, mouse deltas,
+// wheel ticks). Pointer lock is requested on the first left click so the
+// mouse steers the camera.
+export class Input {
+  constructor(canvas) {
+    this.keys = new Set();
+    this.pressed = new Set();
+    this.mouse = false; // left button held
+    this.aim = false; // right button held (scope)
+    this.dx = 0; // mouse movement this frame
+    this.dy = 0;
+    this.wheel = 0; // -1 / 0 / +1 wheel ticks this frame
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+    addEventListener('keydown', (event) => {
+      if (['Space', 'Tab', 'ArrowUp', 'ArrowDown'].includes(event.code)) {
+        event.preventDefault();
+      }
+      if (!this.keys.has(event.code)) this.pressed.add(event.code);
+      this.keys.add(event.code);
+    });
+    addEventListener('keyup', (event) => this.keys.delete(event.code));
+    addEventListener('blur', () => this.clear());
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    canvas.addEventListener('mousedown', (event) => {
+      if (event.button === 0) {
+        this.mouse = true;
+        if (!document.pointerLockElement) canvas.requestPointerLock?.();
+      }
+      if (event.button === 2) this.aim = true;
+    });
+    addEventListener('mouseup', (event) => {
+      if (event.button === 0) this.mouse = false;
+      if (event.button === 2) this.aim = false;
+    });
+    addEventListener('mousemove', (event) => {
+      if (document.pointerLockElement) {
+        this.dx += event.movementX;
+        this.dy += event.movementY;
+      }
+    });
+    canvas.addEventListener(
+      'wheel',
+      (event) => {
+        this.wheel = Math.sign(event.deltaY);
+        event.preventDefault();
+      },
+      { passive: false }
+    );
+  }
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+  // Is the key held right now?
+  down(code) {
+    return this.keys.has(code);
+  }
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  // Was the key pressed down this frame?
+  tap(code) {
+    return this.pressed.has(code);
+  }
 
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+  // Drop all state (used when a menu opens or the window loses focus).
+  clear() {
+    this.keys.clear();
+    this.pressed.clear();
+    this.mouse = false;
+    this.aim = false;
+  }
+
+  // End-of-frame housekeeping: forget fresh presses and mouse movement.
+  end() {
+    this.pressed.clear();
+    this.dx = 0;
+    this.dy = 0;
+    this.wheel = 0;
+  }
 }
