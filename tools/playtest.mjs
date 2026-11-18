@@ -1,8 +1,9 @@
-// CDP play-test for Solmere Heat v3: serves game/, drives it in headless
+// CDP play-test for Solmere Heat v4: serves game/, drives it in headless
 // Chromium over the DevTools protocol, and checks the game end to end:
-// menus, driving, all seven weapons, the twelve story chapters, the Sun
-// Coins, the street races, the lighthouse, saves, the four screenshot
-// scenes, and zero console errors or network requests outside localhost.
+// menus, driving, all eight weapons, the fifteen story chapters, the Sun
+// Coins, the street races, the taxi fares, the buyable properties, the
+// day-night cycle, the lighthouse, saves, the four screenshot scenes, and
+// zero console errors or network requests outside localhost.
 // Usage: node tools/playtest.mjs [--port 8091]
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -104,13 +105,13 @@ async function check(name, fn) {
 
 const VK = {
   KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, KeyE: 69, KeyJ: 74, KeyR: 82,
-  KeyF: 70, KeyM: 77, Space: 32, Escape: 27, ShiftLeft: 16,
-  Digit1: 49, Digit2: 50, Digit3: 51, Digit4: 52, Digit5: 53, Digit6: 54, Digit7: 55,
+  KeyF: 70, KeyM: 77, KeyB: 66, KeyT: 84, Space: 32, Escape: 27, ShiftLeft: 16,
+  Digit1: 49, Digit2: 50, Digit3: 51, Digit4: 52, Digit5: 53, Digit6: 54, Digit7: 55, Digit8: 56,
 };
 const KEY = {
   KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyE: 'e', KeyJ: 'j', KeyR: 'r',
-  KeyF: 'f', KeyM: 'm', Space: ' ', Escape: 'Escape', ShiftLeft: 'Shift',
-  Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6', Digit7: '7',
+  KeyF: 'f', KeyM: 'm', KeyB: 'b', KeyT: 't', Space: ' ', Escape: 'Escape', ShiftLeft: 'Shift',
+  Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6', Digit7: '7', Digit8: '8',
 };
 
 let cdp;
@@ -262,11 +263,11 @@ async function main() {
     await evaluate('window.game.player.invulnerable = 99999');
 
     // --- Arsenal ---
-    await check('seven weapons', async () => evaluate('window.game.weapons.list.length === 7'));
+    await check('eight weapons', async () => evaluate('window.game.weapons.list.length === 8'));
     await check('weapon ids in order', async () =>
-      evaluate(`JSON.stringify(window.game.weapons.list.map((w) => w.id)) === '["pistol","smg","shotgun","sniper","rifle","dmr","lmg"]'`));
-    await check('rifle unlocked, dmr and lmg locked at start', async () =>
-      evaluate('window.game.weapons.list[4].unlocked === true && window.game.weapons.list[5].unlocked === false && window.game.weapons.list[6].unlocked === false'));
+      evaluate(`JSON.stringify(window.game.weapons.list.map((w) => w.id)) === '["pistol","smg","shotgun","sniper","rifle","dmr","lmg","crossbow"]'`));
+    await check('rifle unlocked, dmr, lmg and crossbow locked at start', async () =>
+      evaluate('window.game.weapons.list[4].unlocked === true && window.game.weapons.list[5].unlocked === false && window.game.weapons.list[6].unlocked === false && window.game.weapons.list[7].unlocked === false'));
     await check('Digit5 equips the rifle', async () => {
       await keyTap('Digit5');
       return evaluate('window.game.weapons.current.id === "rifle"');
@@ -303,6 +304,32 @@ async function main() {
       const ammo = await evaluate('window.game.weapons.current.ammo');
       return after === before + 1 && ammo === 59;
     });
+    await check('Digit8 blocked while crossbow locked', async () => {
+      await keyTap('Digit8');
+      return evaluate('window.game.weapons.current.id === "lmg"');
+    });
+    await check('unlockById + Digit8 equips the crossbow', async () => {
+      await evaluate(`window.game.weapons.unlockById('crossbow')`);
+      await keyTap('Digit8');
+      return evaluate('window.game.weapons.current.id === "crossbow"');
+    });
+    await check('crossbow fires silently: no heat raised', async () => {
+      await evaluate('window.game.police.clear()');
+      const before = await evaluate('window.game.weapons.shotsFired');
+      await evaluate('window.game.weapons.cooldown = 0; window.game.weapons.fire()');
+      const after = await evaluate('window.game.weapons.shotsFired');
+      const heat = await evaluate('window.game.police.heat');
+      const ammo = await evaluate('window.game.weapons.current.ammo');
+      return after === before + 1 && heat === 0 && ammo === 0;
+    });
+    await check('crossbow scopes on aim with its own label', async () => {
+      await evaluate(`window.game.weapons.list[7].ammo = 1; window.game.weapons.switch(7); window.game.input.aim = true;`);
+      await sleep(300);
+      const scoped = await evaluate('window.game.weapons.scoped === true');
+      const label = await evaluate(`document.getElementById('scopeData').textContent.includes('WHISPER')`);
+      await evaluate('window.game.input.aim = false;');
+      return scoped && label;
+    });
     await check('mouse wheel cycles weapons', async () => {
       await keyTap('Digit1');
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 640, y: 360, deltaX: 0, deltaY: 120 });
@@ -326,13 +353,13 @@ async function main() {
     });
 
     // --- Vehicles ---
-    await check('fleet includes muscle, van and motorcycle types', async () =>
+    await check('fleet includes muscle, van, motorcycle and taxi types', async () =>
       evaluate(
-        `(() => { const t = new Set(window.game.vehicles.all.map((c) => c.type)); return t.has('muscle') && t.has('van') && t.has('motorcycle'); })()`
+        `(() => { const t = new Set(window.game.vehicles.all.map((c) => c.type)); return t.has('muscle') && t.has('van') && t.has('motorcycle') && t.has('taxi'); })()`
       ));
-    await check('at least 2 muscle, 2 van and 2 motorcycles parked', async () =>
+    await check('at least 2 muscle, 2 van, 2 motorcycles and 2 taxis parked', async () =>
       evaluate(
-        `(() => { const all = window.game.vehicles.all; return all.filter((c) => c.type === 'muscle').length >= 2 && all.filter((c) => c.type === 'van').length >= 2 && all.filter((c) => c.type === 'motorcycle').length >= 2; })()`
+        `(() => { const all = window.game.vehicles.all; return all.filter((c) => c.type === 'muscle').length >= 2 && all.filter((c) => c.type === 'van').length >= 2 && all.filter((c) => c.type === 'motorcycle').length >= 2 && all.filter((c) => c.type === 'taxi').length >= 2; })()`
       ));
     await check('van has 140 max hp', async () =>
       evaluate(`window.game.vehicles.all.find((c) => c.type === 'van').maxHp === 140`));
@@ -388,6 +415,15 @@ async function main() {
       const speed = await evaluate('Math.abs(window.game.player.car.speed)');
       console.log('    motorcycle speed after clamp: ' + speed);
       return speed > 45 && speed <= 62.5;
+    });
+    await check('taxi top speed clamps at 48', async () => {
+      await evaluate(
+        `(() => { const g = window.game; const old = g.player.car; if (old) { old.p.set(-200, 0, -200); old.speed = 0; } const t = g.vehicles.all.find((c) => c.type === 'taxi'); g.player.car = null; g.player.mesh.visible = true; g.vehicles.enter(t, true); t.p.set(0, 0, 180); t.angle = Math.PI; t.speed = 100; g.player.p.copy(t.p); })()`
+      );
+      await sleep(500);
+      const speed = await evaluate('Math.abs(window.game.player.car.speed)');
+      console.log('    taxi speed after clamp: ' + speed);
+      return speed > 35 && speed <= 48.5;
     });
     await check('E exits the car when slow', async () => {
       await evaluate('window.game.player.car.speed = 0');
@@ -552,6 +588,68 @@ async function main() {
       return done;
     });
 
+    // --- Story: chapter 13 (Empire of the Sun) ---
+    await check('chapter 13 begins with 5 foes', async () => {
+      await evaluate('window.game.police.clear()');
+      await startChapter(12);
+      return evaluate('window.game.missions.foes.length === 5');
+    });
+    await check('chapter 13 reaches the stronghold', async () => {
+      await teleportPlayer(128, -128);
+      return waitFor('window.game.missions.stage === 1', 10000);
+    });
+    await check('chapter 13 advances once the cartel falls', async () => {
+      await evaluate('window.game.missions.foes.forEach((f) => window.game.combat.damage(f, 999))');
+      return waitFor('window.game.missions.stage === 2', 10000);
+    });
+    await check('chapter 13 completes and unlocks the crossbow', async () => {
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(-21, 38))) return false;
+      const done = await waitFor('window.game.missions.index === 13', 10000);
+      const crossbow = await evaluate('window.game.weapons.list[7].unlocked === true');
+      await clickButton('Free roam');
+      await sleep(300);
+      return done && crossbow;
+    });
+
+    // --- Story: chapter 14 (Five-Star Run) ---
+    await check('chapter 14 begins with timer and 5 stars', async () => {
+      await evaluate('window.game.police.clear()');
+      await startChapter(13);
+      return evaluate('window.game.missions.timer > 80 && window.game.police.heat >= 5');
+    });
+    await check('chapter 14 completes at the marina', async () => {
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(195, 73))) return false;
+      const done = await waitFor('window.game.missions.index === 14', 10000);
+      await clickButton('Free roam');
+      await sleep(300);
+      return done;
+    });
+
+    // --- Story: chapter 15 (Solmere Heat) ---
+    await check('chapter 15 begins with 6 foes', async () => {
+      await evaluate('window.game.police.clear()');
+      await startChapter(14);
+      return evaluate('window.game.missions.foes.length === 6');
+    });
+    await check('chapter 15 reaches the lighthouse', async () => {
+      await teleportPlayer(228, -190);
+      return waitFor('window.game.missions.stage === 1', 10000);
+    });
+    await check('chapter 15 advances once the cartel falls', async () => {
+      await evaluate('window.game.missions.foes.forEach((f) => window.game.combat.damage(f, 999))');
+      return waitFor('window.game.missions.stage === 2 && window.game.police.heat >= 5', 10000);
+    });
+    await check('chapter 15 completes the whole story', async () => {
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(-21, 38))) return false;
+      const done = await waitFor('window.game.missions.index === 15', 10000);
+      await clickButton('Free roam');
+      await sleep(300);
+      return done;
+    });
+
     // --- Street races ---
     await check('three race routes exist', async () => evaluate('window.game.races.routes.length === 3'));
     let raceCashBefore = 0;
@@ -599,6 +697,98 @@ async function main() {
       return evaluate(`document.getElementById('coins').textContent.includes('${count}/12')`);
     });
 
+    // --- Properties ---
+    await check('three properties for sale', async () =>
+      evaluate('window.game.properties.list.length === 3 && window.game.properties.list.every((p) => !p.owned)'));
+    await check('prompt offers the motel near its sign', async () => {
+      await teleportPlayer(-128, 64);
+      await sleep(300);
+      return evaluate(`document.getElementById('prompt').textContent.includes('Buy Sunset Motel')`);
+    });
+    await check('B buys the motel and deducts the price', async () => {
+      await evaluate('window.game.player.cash = 50000');
+      await keyTap('KeyB');
+      await sleep(300);
+      const owned = await evaluate(`window.game.properties.list[0].owned === true`);
+      const cash = await evaluate('window.game.player.cash');
+      return owned && cash === 42000;
+    });
+    await check('owned motel shows in the prompt and pays income', async () => {
+      const promptOk = await evaluate(`document.getElementById('prompt').textContent.includes('yours')`);
+      const before = await evaluate('window.game.player.cash');
+      await evaluate('window.game.properties.payIncome()');
+      const after = await evaluate('window.game.player.cash');
+      return promptOk && after === before + 120;
+    });
+    await check('income timer accrues while playing', async () => {
+      await evaluate('window.game.properties.incomeTimer = 0');
+      await sleep(1500);
+      return evaluate('window.game.properties.incomeTimer > 0');
+    });
+
+    // --- Day-night cycle ---
+    await check('clock starts at golden hour and advances', async () => {
+      await evaluate('window.game.daynight.setClock(18.7)');
+      const a = await evaluate('window.game.daynight.clock');
+      await sleep(2000);
+      const b = await evaluate('window.game.daynight.clock');
+      return a > 18 && a < 19 && b > a;
+    });
+    await check('HUD district line shows the live clock', async () =>
+      evaluate(`document.getElementById('district').textContent.includes(window.game.daynight.timeText())`));
+    await check('setClock to night darkens the sky and thins the crowd', async () => {
+      await evaluate('window.game.daynight.setClock(23)');
+      await sleep(500);
+      const night = await evaluate('window.game.daynight.isNight === true');
+      const moon = await evaluate('window.game.city.moonMesh.visible === true');
+      const hidden = await evaluate(
+        `window.game.pedestrians.all.filter((p) => !p.mesh.visible).length >= 20`
+      );
+      return night && moon && hidden;
+    });
+    await check('setClock back to noon restores daylight', async () => {
+      await evaluate('window.game.daynight.setClock(12)');
+      await sleep(500);
+      const day = await evaluate('window.game.daynight.isNight === false');
+      const sun = await evaluate('window.game.city.sunMesh.visible === true');
+      const allOut = await evaluate(
+        `window.game.pedestrians.all.every((p) => p.mesh.visible)`
+      );
+      return day && sun && allOut;
+    });
+
+    // --- Taxi fares ---
+    // Headless game time crawls (SwiftShader runs ~2 fps), so the
+    // 5-second respawn cooldown is cleared directly here — the countdown
+    // itself is covered by the probe, and these checks exercise pickup,
+    // delivery and the next spawn.
+    await check('a passenger waits at a stand', async () => {
+      await evaluate('window.game.taxi.cooldown = 0');
+      const arrived = await waitFor('window.game.taxi.waiting !== null', 10000);
+      return arrived && (await evaluate('window.game.taxi.passenger.visible === true'));
+    });
+    await check('T picks up the passenger in a car', async () => {
+      await evaluate('window.game.police.clear()');
+      const stand = await evaluate('window.game.taxi.waiting');
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(stand.x, stand.z))) return false;
+      await keyTap('KeyT');
+      await sleep(300);
+      return evaluate('window.game.taxi.onboard === true && window.game.taxi.destination !== null');
+    });
+    await check('delivering the passenger pays the fare and grows the streak', async () => {
+      const dest = await evaluate('window.game.taxi.destination');
+      const before = await evaluate('window.game.player.cash');
+      if (!(await teleportCar(dest.x, dest.z))) return false;
+      const done = await waitFor('window.game.taxi.onboard === false && window.game.taxi.streak === 1', 10000);
+      const after = await evaluate('window.game.player.cash');
+      return done && after > before;
+    });
+    await check('next passenger arrives after the cooldown', async () => {
+      await evaluate('window.game.taxi.cooldown = 0');
+      return waitFor('window.game.taxi.waiting !== null', 10000);
+    });
+
     // --- City and polish ---
     await check('lighthouse beacon exists and rotates', async () => {
       const a = await evaluate('window.game.city.beacon.rotation.y');
@@ -613,11 +803,11 @@ async function main() {
     });
 
     // --- Save ---
-    await check('save persists coins, chapter and race bests', async () => {
+    await check('save persists coins, chapter, properties and race bests', async () => {
       await evaluate('window.game.persist()');
       const count = await evaluate('window.game.collectibles.collected');
       return evaluate(
-        `(() => { const d = JSON.parse(localStorage.getItem('solmere-heat-v1')); return d && d.mission === 12 && Array.isArray(d.coins) && d.coins.length === ${count} && d.races && typeof d.races.palm === 'number'; })()`
+        `(() => { const d = JSON.parse(localStorage.getItem('solmere-heat-v1')); return d && d.mission === 15 && Array.isArray(d.coins) && d.coins.length === ${count} && Array.isArray(d.properties) && d.properties.includes('motel') && d.races && typeof d.races.palm === 'number'; })()`
       );
     });
 

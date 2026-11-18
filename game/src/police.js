@@ -169,10 +169,12 @@ export class Police {
       }
     }
 
-    // Heat decays only while nobody can see the player.
+    // Heat decays only while nobody can see the player — twice as fast
+    // after dark, when the city is quiet and the patrols thin out.
     this.unseen = seen ? 0 : this.unseen + dt;
     if (this.unseen > 12) {
-      this.heat = Math.max(0, this.heat - dt * 0.13);
+      const rate = game.daynight.isNight ? 0.26 : 0.13;
+      this.heat = Math.max(0, this.heat - dt * rate);
       if (this.heat === 0) this.clear();
     }
     this.sirenTimer -= dt;

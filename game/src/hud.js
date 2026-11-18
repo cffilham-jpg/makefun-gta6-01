@@ -1,10 +1,12 @@
 // The heads-up display: cash, wanted stars, health, the Sun Coin count,
 // the mission objective, the race timer, the weapon readout, the message
-// feed and the canvas minimap. update() runs every frame and pushes the
-// live game state into the DOM elements index.html defines; minimap()
-// redraws the little map around the player (roads, buildings, the coast,
-// the garage, the mission marker, the race checkpoints, police, and the
-// Sun Coins still out there).
+// feed, the context prompt (buy a property, pick up a taxi passenger)
+// and the canvas minimap. update() runs every frame and pushes the live
+// game state into the DOM elements index.html defines; minimap() redraws
+// the little map around the player (roads, buildings, the coast, the
+// garage, the mission marker, the race checkpoints, police, the Sun Coins
+// still out there, the properties for sale or owned, and the taxi
+// passenger and destination).
 import { clamp } from './utils.js';
 import { STORY } from './missions.js';
 
@@ -63,7 +65,9 @@ export class HUD {
           : 'SOLMERE COAST'
         : player.p.z < 0
           ? 'MERIDIAN / DOWNTOWN'
-          : 'PALM AVENUE') + ' / 18:42';
+          : 'PALM AVENUE') + ' / ' + game.daynight.timeText();
+    // The context prompt: the nearest thing Danny can do right now.
+    $('prompt').textContent = game.taxi.prompt() || game.properties.prompt();
     $('speed').style.display = player.car ? 'block' : 'none';
     if (player.car) {
       $('speed').querySelector('strong').textContent = Math.round(Math.abs(player.car.speed) * 3.6)
@@ -81,11 +85,15 @@ export class HUD {
     $('reload').textContent =
       game.weapons.reloadLeft > 0
         ? 'RELOADING ' + game.weapons.reloadLeft.toFixed(1) + 's'
-        : weapon.id === 'sniper' || weapon.id === 'dmr'
+        : weapon.id === 'sniper' || weapon.id === 'dmr' || weapon.id === 'crossbow'
           ? 'HOLD RMB TO SCOPE'
-          : '1–7 SWITCH · WHEEL CYCLE';
+          : '1–8 SWITCH · WHEEL CYCLE';
     $('scopeData').innerHTML =
-      weapon.id === 'dmr' ? 'KESTREL / DMR<br>4× MARKSMAN OPTIC' : 'SV-9 / DEADEYE<br>6× PRECISION OPTIC';
+      weapon.id === 'dmr'
+        ? 'KESTREL / DMR<br>4× MARKSMAN OPTIC'
+        : weapon.id === 'crossbow'
+          ? 'WHISPER X9<br>SILENT OPTIC'
+          : 'SV-9 / DEADEYE<br>6× PRECISION OPTIC';
     $('hitmarker').textContent = game.weapons.hitTime > 0 ? '×' : '';
     $('hitmarker').className = game.weapons.hitKind;
     $('hitfeedback').textContent = game.weapons.hitTime > 0 ? game.weapons.feedback : '';
@@ -174,6 +182,32 @@ export class HUD {
       const z = toZ(coin.p.z);
       if (x < 0 || x > 200 || z < 0 || z > 180) continue;
       ctx.fillRect(x - 2, z - 2, 4, 4);
+    }
+    // Properties: gold squares for sale, green squares owned.
+    for (const property of game.properties.list) {
+      const x = toX(property.x);
+      const z = toZ(property.z);
+      if (x < 0 || x > 200 || z < 0 || z > 180) continue;
+      ctx.fillStyle = property.owned ? '#7fd08a' : '#e8c33c';
+      ctx.fillRect(x - 3, z - 3, 6, 6);
+    }
+    // Taxi: the waiting passenger as a cyan dot, the destination as a
+    // magenta diamond.
+    if (game.taxi.waiting && !game.taxi.onboard) {
+      ctx.fillStyle = '#7fe8e0';
+      const x = clamp(toX(game.taxi.waiting.x), 6, 194);
+      const z = clamp(toZ(game.taxi.waiting.z), 6, 174);
+      ctx.fillRect(x - 2, z - 2, 4, 4);
+    }
+    if (game.taxi.onboard && game.taxi.destination) {
+      ctx.fillStyle = '#e07fc8';
+      const x = clamp(toX(game.taxi.destination.x), 8, 192);
+      const z = clamp(toZ(game.taxi.destination.z), 8, 172);
+      ctx.save();
+      ctx.translate(x, z);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.restore();
     }
     // The player arrow, rotated to the heading.
     ctx.save();

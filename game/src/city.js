@@ -14,6 +14,7 @@ export class City {
   constructor(game) {
     this.game = game;
     this.solids = [];
+    this.lampGlows = []; // every street lamp's glow material (day-night dims them)
     this.roads = [-192, -128, -64, 0, 64, 128, 192];
     this.garage = new THREE.Vector3(-21, 0, 30);
     this.hospital = new THREE.Vector3(-20, 0, -30);
@@ -171,10 +172,13 @@ export class City {
     tower.add(cap);
     this.beacon = new THREE.Group();
     this.beacon.position.y = 19;
-    const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.7, 55),
-      new THREE.MeshBasicMaterial({ color: '#fff2a8', transparent: true, opacity: 0.22, depthWrite: false })
-    );
+    this.beaconBeamMat = new THREE.MeshBasicMaterial({
+      color: '#fff2a8',
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+    });
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 55), this.beaconBeamMat);
     beam.position.z = 27.5;
     this.beacon.add(beam);
     tower.add(this.beacon);
@@ -187,26 +191,37 @@ export class City {
     if (this.beacon) this.beacon.rotation.y += dt * 0.45;
   }
 
-  // Golden-hour sky dome and a low sun.
+  // The sky dome and its sun and moon discs. The dome's colours are
+  // uniforms, so the day-night cycle repaints the sky every frame; the
+  // sun and moon are stored so the cycle can swing them across the sky.
   buildSky(scene) {
-    const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(850, 24, 16),
-      new THREE.ShaderMaterial({
-        side: THREE.BackSide,
-        uniforms: {},
-        vertexShader:
-          'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-        fragmentShader:
-          'varying vec3 v; void main(){float h=normalize(v).y; vec3 a=vec3(1.,.73,.53);vec3 b=vec3(.27,.60,.70);gl_FragColor=vec4(mix(a,b,smoothstep(0.,.8,h)),1.);}',
-      })
-    );
+    const skyMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        topColor: { value: new THREE.Color('#45889a') },
+        bottomColor: { value: new THREE.Color('#ffb27a') },
+      },
+      vertexShader:
+        'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+      fragmentShader:
+        'uniform vec3 topColor; uniform vec3 bottomColor; varying vec3 v; void main(){float h=normalize(v).y; gl_FragColor=vec4(mix(bottomColor,topColor,smoothstep(0.,.8,h)),1.);}',
+    });
+    this.skyUniforms = skyMaterial.uniforms;
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(850, 24, 16), skyMaterial);
     scene.add(sky);
-    const sun = new THREE.Mesh(
+    this.sunMesh = new THREE.Mesh(
       new THREE.SphereGeometry(16, 24, 16),
       new THREE.MeshBasicMaterial({ color: '#ffe0a0' })
     );
-    sun.position.set(-330, 110, -420);
-    scene.add(sun);
+    this.sunMesh.position.set(-330, 110, -420);
+    scene.add(this.sunMesh);
+    this.moonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(11, 24, 16),
+      new THREE.MeshBasicMaterial({ color: '#d8e0ea' })
+    );
+    this.moonMesh.position.set(330, 320, 420);
+    this.moonMesh.visible = false;
+    scene.add(this.moonMesh);
   }
 
   // Merge every loose static box into one instanced mesh per material.
@@ -288,7 +303,8 @@ export class City {
     }
   }
 
-  // A street lamp with a warm glowing head.
+  // A street lamp with a warm glowing head. The glow material is kept
+  // so the day-night cycle can brighten it after dark.
   lamp(x, z) {
     const scene = this.game.scene;
     addCylinder(scene, 0.07, 0.12, 6, '#4b5b5b', x, 3, z);
@@ -298,6 +314,7 @@ export class City {
       emissive: '#ffd48d',
       emissiveIntensity: 0.5,
     });
+    this.lampGlows.push(glow);
     addBox(scene, 0.65, 0.12, 0.4, glow, x + 1.4, 5.9, z);
   }
 

@@ -28,10 +28,12 @@ export class Traffic {
 
   update(dt) {
     const game = this.game;
+    // Night traffic is thinner and slower than the daytime rush.
+    const cruise = game.daynight.isNight ? 7 : 10;
     for (const car of this.cars) {
       if (!car.ai || car === game.player.car || car.hp <= 0) continue;
       // Look ahead in our own lane: stop when a car is close in front.
-      let targetSpeed = 10;
+      let targetSpeed = cruise;
       for (const other of game.vehicles.all) {
         if (other === car) continue;
         const dx = other.p.x - car.p.x;

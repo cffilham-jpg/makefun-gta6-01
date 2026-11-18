@@ -1,8 +1,9 @@
 // Save games live in localStorage under one versioned key: cash, the story
 // chapter reached, the player's position, unlocked vehicle types, the
-// weapons the player has earned, the Sun Coins already collected, and the
-// best street-race time per route. Everything is validated on load so a
-// corrupt or foreign save can never break the game.
+// weapons the player has earned, the Sun Coins already collected, the
+// properties Danny owns, and the best street-race time per route.
+// Everything is validated on load so a corrupt or foreign save can never
+// break the game.
 import { STORY } from './missions.js';
 
 const SAVE_KEY = 'solmere-heat-v1';
@@ -34,6 +35,7 @@ export function save(game) {
         coins: game.collectibles.coins
           .map((coin, i) => (coin.taken ? i : -1))
           .filter((i) => i >= 0),
+        properties: game.properties.ownedIds,
         races: game.races.best,
       })
     );
@@ -66,6 +68,12 @@ export function restore(game, data) {
         coin.mesh.visible = false;
         coin.ring.visible = false;
       }
+    }
+  }
+  if (Array.isArray(data.properties)) {
+    for (const id of data.properties) {
+      const property = game.properties.list.find((entry) => entry.id === id);
+      if (property && !property.owned) game.properties.setOwned(property);
     }
   }
   if (data.races && typeof data.races === 'object') {

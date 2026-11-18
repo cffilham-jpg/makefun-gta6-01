@@ -1,4 +1,4 @@
-// The arsenal: seven weapons with distinct feels, plus the aiming, firing
+// The arsenal: eight weapons with distinct feels, plus the aiming, firing
 // and feedback around them. The flagships are the SV-9 Deadeye sniper —
 // hold the right mouse button to look down its scope (the field of view
 // narrows and a reticle overlay appears), one shot drops a regular enemy,
@@ -6,7 +6,10 @@
 // rifle that rewards a steady hand at range. The Tempest LMG is the
 // heavy option: a 60-round belt, the fastest sustained fire in the game,
 // earned in The Vault Job (chapter 10) or from the black crate on North
-// Avenue. Every shot is a raycast from the camera with per-weapon spread;
+// Avenue. The Whisper X9 crossbow is the quiet one: scoped, single-shot,
+// and silent — its bolts raise no heat and never scare a crowd, earned in
+// Empire of the Sun (chapter 13) or from the grey crate at the lighthouse.
+// Every shot is a raycast from the camera with per-weapon spread;
 // buildings stop bullets, tracers show the path, and a hit marker
 // confirms each hit.
 import * as THREE from 'three';
@@ -20,10 +23,11 @@ export const DEFINITIONS = [
   { id: 'rifle', name: 'Falcon AR-7', icon: '▰━╦━', damage: 22, rate: 0.11, mag: 30, reserve: 300, reload: 1.9, range: 120, spread: 0.012, pellets: 1, unlocked: true },
   { id: 'dmr', name: 'Kestrel DMR', icon: '━▰╋━━', damage: 85, rate: 0.7, mag: 8, reserve: 40, reload: 2.4, range: 400, spread: 0.001, pellets: 1, unlocked: false, hint: 'collect the crate at the marina or complete Night Run' },
   { id: 'lmg', name: 'Tempest LMG', icon: '▰━━━╦', damage: 26, rate: 0.1, mag: 60, reserve: 240, reload: 3.0, range: 140, spread: 0.018, pellets: 1, unlocked: false, hint: 'complete The Vault Job or find the black crate on North Avenue' },
+  { id: 'crossbow', name: 'Whisper X9', icon: '━╋━', damage: 120, rate: 1.6, mag: 1, reserve: 30, reload: 1.8, range: 200, spread: 0, pellets: 1, unlocked: false, silent: true, hint: 'complete Empire of the Sun or find the grey crate at the lighthouse' },
 ];
 
 // The scoped weapons: aiming down their sights narrows the field of view.
-export const SCOPED = ['sniper', 'dmr'];
+export const SCOPED = ['sniper', 'dmr', 'crossbow'];
 
 export class Weapons {
   constructor(game) {
@@ -164,10 +168,13 @@ export class Weapons {
     this.cooldown = weapon.rate;
     this.shotsFired++;
     game.audio.shot(weapon.id);
-    game.police.crime(weapon.id === 'sniper' ? 1.3 : weapon.id === 'dmr' ? 0.8 : 0.35);
-    game.pedestrians.scare(game.player.p, 70);
+    // A silent weapon raises no heat and never scares the crowd.
+    if (!weapon.silent) {
+      game.police.crime(weapon.id === 'sniper' ? 1.3 : weapon.id === 'dmr' ? 0.8 : 0.35);
+      game.pedestrians.scare(game.player.p, 70);
+    }
     game.shake =
-      weapon.id === 'sniper' ? 0.23 : weapon.id === 'shotgun' ? 0.3 : weapon.id === 'dmr' ? 0.18 : weapon.id === 'lmg' ? 0.12 : 0.07;
+      weapon.id === 'sniper' ? 0.23 : weapon.id === 'shotgun' ? 0.3 : weapon.id === 'dmr' ? 0.18 : weapon.id === 'lmg' ? 0.12 : weapon.id === 'crossbow' ? 0.05 : 0.07;
     this.lastHits = [];
 
     const origin = game.camera.position.clone();

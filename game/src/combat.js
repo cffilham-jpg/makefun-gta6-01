@@ -14,10 +14,12 @@ export class Combat {
     this.punchTimer = 0;
     // The gold weapon crate by the safehouse holds the SV-9 Deadeye; the
     // steel-blue crate at the marina holds the Kestrel DMR; the black
-    // crate on North Avenue holds the Tempest LMG.
+    // crate on North Avenue holds the Tempest LMG; the grey crate at the
+    // lighthouse holds the Whisper X9 crossbow.
     this.crate(-12, 30, 'weapon');
     this.crate(208, 60, 'dmr');
     this.crate(-128, -192, 'lmg');
+    this.crate(224, -190, 'crossbow');
     for (const [x, z] of [[-12, -35], [77, 12], [178, -53], [-75, 138]]) {
       this.crate(x, z, 'ammo');
       this.crate(x + 4, z, 'health');
@@ -25,7 +27,8 @@ export class Combat {
   }
 
   // Place a pickup crate: gold for a weapon, steel blue for the DMR,
-  // black for the LMG, green for health, grey for ammo.
+  // black for the LMG, grey for the crossbow, green for health, grey
+  // for ammo.
   crate(x, z, type) {
     const color =
       type === 'weapon'
@@ -34,9 +37,11 @@ export class Combat {
           ? '#8fb8d8'
           : type === 'lmg'
             ? '#2f343c'
-            : type === 'health'
-              ? '#70b9a0'
-              : '#a3b1b0';
+            : type === 'crossbow'
+              ? '#7a8a94'
+              : type === 'health'
+                ? '#70b9a0'
+                : '#a3b1b0';
     const mesh = addBox(this.game.scene, 1.2, 0.8, 1, color, x, 0.6, z);
     addBox(mesh, 1.24, 0.12, 1.04, '#e6dab0', 0, 0.3, 0);
     this.pickups.push({ mesh, p: mesh.position, type, used: false, respawn: 0 });
@@ -151,6 +156,9 @@ export class Combat {
         } else if (pickup.type === 'lmg') {
           game.weapons.unlockById('lmg');
           game.weapons.switch(6);
+        } else if (pickup.type === 'crossbow') {
+          game.weapons.unlockById('crossbow');
+          game.weapons.switch(7);
         } else if (pickup.type === 'health') {
           game.player.hp = Math.min(100, game.player.hp + 40);
           game.hud.message('Health +40');

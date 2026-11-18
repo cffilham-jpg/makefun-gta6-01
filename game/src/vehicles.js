@@ -3,20 +3,22 @@
 // speed, health, wheels and (for police) light bars — shared by the
 // traffic AI, the police chases and the player's driving. Stealing a car
 // (E near one) is a crime; crashing one hard enough earns heat too.
-// Eight types: the sedan, coupe, SUV and pickup of the first version, the
+// Nine types: the sedan, coupe, SUV and pickup of the first version, the
 // fast muscle car with a hood scoop and spoiler and the tough boxy van of
-// the second, and the motorcycle of the third — the fastest ride in
-// Solmere, fragile, and quickest through a corner.
+// the second, the motorcycle of the third — the fastest ride in Solmere,
+// fragile, and quickest through a corner — and the yellow taxi cab of the
+// fourth, with a roof sign and a checker stripe, which pays half again on
+// every taxi fare.
 import * as THREE from 'three';
 import { addBox, addCylinder, clamp, groundDistance, burst } from './utils.js';
 
-export const TYPES = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'motorcycle', 'police'];
+export const TYPES = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'motorcycle', 'taxi', 'police'];
 
 // The types parked around the city (police cruisers are never parked).
-export const PARKED = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'motorcycle'];
+export const PARKED = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'motorcycle', 'taxi'];
 
 // Top speed in m/s per type (anything unlisted drives at 43).
-export const TOP_SPEEDS = { coupe: 52, muscle: 58, van: 38, police: 46, motorcycle: 62 };
+export const TOP_SPEEDS = { coupe: 52, muscle: 58, van: 38, police: 46, motorcycle: 62, taxi: 48 };
 
 // Throttle in m/s^2 per type (anything unlisted accelerates at 21).
 export const ACCELERATION = { motorcycle: 28 };
@@ -40,8 +42,9 @@ export class Vehicles {
 
   // Assemble a car from boxes: body, cabin, glass, wheels, lights. Police
   // cruisers get a roof bar with red and blue flashers, muscle cars a hood
-  // scoop and a rear spoiler, vans a tall boxy cabin and a roof rack, and
-  // motorcycles a narrow frame with two wheels in line.
+  // scoop and a rear spoiler, vans a tall boxy cabin and a roof rack,
+  // motorcycles a narrow frame with two wheels in line, and taxis a roof
+  // sign and a black checker stripe down each side.
   spawn(type, x, z, angle = 0, color = '#82aaa2') {
     const game = this.game;
     const group = new THREE.Group();
@@ -51,6 +54,7 @@ export class Vehicles {
     const isVan = type === 'van';
     const isCop = type === 'police';
     const isBike = type === 'motorcycle';
+    const isTaxi = type === 'taxi';
     const wheels = [];
     if (isBike) {
       // A motorcycle: narrow frame, fuel tank, seat, handlebar, front
@@ -100,6 +104,16 @@ export class Vehicles {
       if (isVan) {
         addBox(group, 1.6, 0.12, 2.6, '#3a4a4d', 0, 2.82, 0);
         addBox(group, 2.3, 0.18, 0.1, '#2c3f45', 0, 1.5, length / 2 + 0.02);
+      }
+      if (isTaxi) {
+        // A lit roof sign and a black checker stripe down each side.
+        addBox(group, 1.1, 0.22, 0.35, '#f5e6a8', 0, 2.32, 0);
+        addBox(group, 1.14, 0.06, 0.39, '#1c2428', 0, 2.2, 0);
+        for (const side of [-1, 1]) {
+          for (let i = 0; i < 5; i++) {
+            addBox(group, 0.06, 0.22, 0.42, i % 2 ? '#f5e6a8' : '#1c2428', side * 1.22, 1.0, -1.7 + i * 0.85);
+          }
+        }
       }
       for (const a of [-1.15, 1.15]) {
         for (const b of [-1.7, 1.7]) {

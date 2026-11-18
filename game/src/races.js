@@ -150,8 +150,10 @@ export class Races {
     );
   }
 
-  // Start a route: the clock runs from the start ring.
+  // Start a route: the clock runs from the start ring. A taxi fare in
+  // progress is abandoned — the race owns the objective line now.
   start(route) {
+    this.game.taxi.cancel('Fare cancelled • a street race took over');
     this.active = true;
     this.route = route;
     this.gate = 0;

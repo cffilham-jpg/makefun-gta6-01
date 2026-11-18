@@ -35,7 +35,14 @@ export class Pedestrians {
 
   update(dt) {
     const game = this.game;
-    for (const person of this.all) {
+    // At night two in five pedestrians stay home, so the sidewalks thin
+    // out after dark (the same people every night — index-based, so the
+    // crowd is stable across frames).
+    const night = game.daynight.isNight;
+    for (let i = 0; i < this.all.length; i++) {
+      const person = this.all[i];
+      person.mesh.visible = !(night && i % 5 < 2);
+      if (!person.mesh.visible) continue;
       // The fallen stay down for a while, then get back up.
       if (person.hp <= 0) {
         person.mesh.rotation.z = Math.PI / 2;

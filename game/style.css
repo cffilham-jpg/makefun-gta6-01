@@ -254,6 +254,24 @@ header {
   color: #ffd38a;
 }
 
+/* Context prompt (buy a property, pick up a taxi passenger), centred
+   just above the controls hint. Empty when nothing is in reach. */
+#prompt {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: #ffe9b0;
+  background: linear-gradient(90deg, #14383dcc, #14383dee, #14383dcc);
+  border: 1px solid #e8c33c66;
+  padding: 8px 18px;
+  white-space: nowrap;
+}
+
+#prompt:empty { display: none; }
+
 #hint {
   position: absolute;
   bottom: 22px;

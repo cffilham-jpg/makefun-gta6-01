@@ -1,11 +1,11 @@
-// Danny Reyes' story: twelve chapters, each with its own job, told through
+// Danny Reyes' story: fifteen chapters, each with its own job, told through
 // Lena's briefings. A glowing waypoint beam marks the objective in the
 // world and on the minimap; finishing a chapter pays cash and (after
 // chapter 2) unlocks the SV-9 Deadeye sniper, chapter 7 unlocks the
-// Kestrel DMR, and chapter 10 unlocks the Tempest LMG. J starts the next
-// chapter; the garage clears the heat between jobs. Chapters that hinge
-// on a firefight track their own guards in this.foes, so only those
-// guards gate the next stage.
+// Kestrel DMR, chapter 10 unlocks the Tempest LMG, and chapter 13 unlocks
+// the Whisper X9 crossbow. J starts the next story chapter; the garage
+// clears the heat between jobs. Chapters that hinge on a firefight track
+// their own guards in this.foes, so only those guards gate the next stage.
 import * as THREE from 'three';
 import { groundDistance } from './utils.js';
 
@@ -70,6 +70,21 @@ export const STORY = [
     voice: 'Lena: The Vipers’ final play is at the marina. End it, then run for the lighthouse.',
     reward: 12000,
   },
+  {
+    name: 'Empire of the Sun',
+    voice: 'Lena: The Vipers are gone, but the Meridian Cartel moved into their downtown stronghold. Take it — then it is yours.',
+    reward: 9000,
+  },
+  {
+    name: 'Five-Star Run',
+    voice: 'Lena: The cartel put a price on your head. Five stars, ninety seconds, one road to the coast. Drive, Danny. Drive.',
+    reward: 10000,
+  },
+  {
+    name: 'Solmere Heat',
+    voice: 'Lena: One last war. The cartel’s kingpin is at the lighthouse with everything he has. End this — for Solmere.',
+    reward: 15000,
+  },
 ];
 
 export class Missions {
@@ -126,8 +141,9 @@ export class Missions {
       this.game.hud.message('Story complete • the city is yours');
       return;
     }
-    // A story chapter takes over from any race in progress.
+    // A story chapter takes over from any race or taxi fare in progress.
     this.game.races.cancel('Race abandoned • a story chapter took over');
+    this.game.taxi.cancel('Fare cancelled • a story chapter took over');
     this.active = true;
     this.stage = 0;
     this.timer = 0;
@@ -210,6 +226,29 @@ export class Missions {
         this.game.combat.spawn(202, 78),
         this.game.combat.spawn(193, 68, true),
       ];
+    } else if (this.index === 12) {
+      this.waypoint(128, -128, 'EMPIRE OF THE SUN • take the cartel stronghold downtown');
+      this.foes = [
+        this.game.combat.spawn(124, -124),
+        this.game.combat.spawn(132, -126, true),
+        this.game.combat.spawn(128, -134),
+        this.game.combat.spawn(120, -130),
+        this.game.combat.spawn(136, -132),
+      ];
+    } else if (this.index === 13) {
+      this.timer = 90;
+      this.game.police.heat = 5;
+      this.waypoint(195, 75, 'FIVE-STAR RUN • reach the marina in 90s at five stars');
+    } else if (this.index === 14) {
+      this.waypoint(228, -190, 'SOLMERE HEAT • the cartel kingpin at the lighthouse');
+      this.foes = [
+        this.game.combat.spawn(224, -186),
+        this.game.combat.spawn(232, -188, true),
+        this.game.combat.spawn(228, -196),
+        this.game.combat.spawn(220, -192),
+        this.game.combat.spawn(236, -194),
+        this.game.combat.spawn(226, -182, true),
+      ];
     }
   }
 
@@ -220,6 +259,7 @@ export class Missions {
     if (this.index === 1) this.game.weapons.unlock();
     if (this.index === 6) this.game.weapons.unlockById('dmr');
     if (this.index === 9) this.game.weapons.unlockById('lmg');
+    if (this.index === 12) this.game.weapons.unlockById('crossbow');
     this.index++;
     this.active = false;
     this.marker.visible = false;
@@ -240,7 +280,11 @@ export class Missions {
             ? 'Kestrel DMR unlocked'
             : this.index === 10
               ? 'Tempest LMG unlocked'
-              : 'Danny’s reputation grows'),
+              : this.index === 13
+                ? 'Whisper X9 unlocked'
+                : this.index === STORY.length
+                  ? 'Solmere is yours, Danny'
+                  : 'Danny’s reputation grows'),
       [
         [
           'Continue',
@@ -451,6 +495,58 @@ export class Missions {
         else if (game.player.car && this.target && groundDistance(game.player.p, this.target) < 15) {
           this.complete();
         }
+      }
+    } else if (chapter === 12) {
+      // Empire of the Sun: take the downtown stronghold, clear all five
+      // cartel guards, then lose four stars at the garage.
+      if (this.stage === 0 && this.target && groundDistance(game.player.p, this.target) < 16) {
+        this.stage = 1;
+        this.marker.visible = false;
+        this.target = null;
+        this.objective = 'EMPIRE OF THE SUN • clear the cartel from the stronghold';
+      } else if (this.stage === 1 && this.foes.every((foe) => foe.hp <= 0)) {
+        this.stage = 2;
+        game.police.heat = 4;
+        this.waypoint(-21, 40, 'EMPIRE OF THE SUN • lose the heat at Reyes Auto');
+        game.hud.message('Stronghold taken • four stars, run for the garage');
+      } else if (
+        this.stage === 2 &&
+        this.target &&
+        game.player.car &&
+        groundDistance(game.player.p, this.target) < 14
+      ) {
+        game.police.clear();
+        this.complete();
+      }
+    } else if (chapter === 13) {
+      // Five-Star Run: a 90-second dash to the marina at five stars.
+      this.timer -= dt;
+      game.police.heat = Math.max(5, game.police.heat);
+      if (this.timer <= 0) this.fail('The cartel caught up before the coast.');
+      else if (game.player.car && this.target && groundDistance(game.player.p, this.target) < 15) {
+        this.complete();
+      }
+    } else if (chapter === 14) {
+      // Solmere Heat: clear six cartel guards at the lighthouse, then
+      // lose five stars at the garage — the final job.
+      if (this.stage === 0 && this.target && groundDistance(game.player.p, this.target) < 16) {
+        this.stage = 1;
+        this.marker.visible = false;
+        this.target = null;
+        this.objective = 'SOLMERE HEAT • clear the kingpin’s guards';
+      } else if (this.stage === 1 && this.foes.every((foe) => foe.hp <= 0)) {
+        this.stage = 2;
+        game.police.heat = 5;
+        this.waypoint(-21, 40, 'SOLMERE HEAT • lose five stars at Reyes Auto');
+        game.hud.message('The kingpin is down • five stars, one last run home');
+      } else if (
+        this.stage === 2 &&
+        this.target &&
+        game.player.car &&
+        groundDistance(game.player.p, this.target) < 14
+      ) {
+        game.police.clear();
+        this.complete();
       }
     }
   }
