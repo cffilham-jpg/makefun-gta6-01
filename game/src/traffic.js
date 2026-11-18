@@ -6,7 +6,7 @@ export class Traffic {
   constructor(game) {
     this.game = game;
     this.cars = [];
-    const bodies = ['sedan', 'SUV', 'coupe'];
+    const bodies = ['sedan', 'SUV', 'coupe', 'van', 'muscle'];
     const paints = ['#c07863', '#ddd3b6', '#679aa0'];
     for (let i = 0; i < 18; i++) {
       // Alternate east-west and north-south traffic across the road grid.

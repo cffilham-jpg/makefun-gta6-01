@@ -3,9 +3,9 @@
 // input needed — camera, player state, cars, cops and traffic — then flags
 // window.__shotReady once the scene is fully rendered. Four shots:
 //   chase   — the cover: a police chase on Palm Avenue at three stars.
-//   city    — driving downtown through traffic, heat off.
+//   city    — driving downtown in the muscle car, heat off.
 //   foot    — Danny on foot at the marina, waypoint set.
-//   mission — the SV-9 Deadeye in action during The Big Score.
+//   mission — the Kestrel DMR in action during Harbor Lights.
 // The cameras sit clear of palms and buildings so the frame stays open.
 import * as THREE from 'three';
 
@@ -38,7 +38,7 @@ export function setupShot(game) {
     placeCamera([2, 8, -58], [-1, 1.7, -25]);
     game.hud.message('LENA / Keep them on Palm Avenue. We need one more minute.');
   } else if (name === 'city') {
-    const car = game.vehicles.spawn('coupe', 4, -53, Math.PI, '#e9a04f');
+    const car = game.vehicles.spawn('muscle', 4, -53, Math.PI, '#e9a04f');
     game.vehicles.enter(car, true);
     car.speed = 19;
     game.police.heat = 0;
@@ -58,24 +58,24 @@ export function setupShot(game) {
     placeCamera([235, 6, 62], [200, 3, 32]);
     game.hud.message('The sea brings everything back. Even Danny Reyes.');
   } else {
-    // Mission: Danny covers Lena at the marina exchange, sniper in hand.
-    game.player.p.set(195, 0, 99);
+    // Mission: Danny clears the lighthouse guards with the Kestrel DMR.
+    game.player.p.set(230, 0, -165);
     game.player.yaw = Math.PI;
     game.player.mesh.rotation.y = Math.PI;
-    game.weapons.unlock();
-    game.weapons.index = 3;
-    game.missions.index = 4;
+    game.weapons.unlockById('dmr');
+    game.weapons.index = 5;
+    game.missions.index = 5;
     game.missions.timer = 0;
-    game.missions.waypoint(195, 74, 'THE BIG SCORE • cover Lena at the marina exchange');
-    game.combat.spawn(194, 76);
-    game.combat.spawn(199, 72, true);
+    game.missions.waypoint(228, -190, 'HARBOR LIGHTS • clear the guards at Lighthouse Point');
+    game.combat.spawn(228, -185);
+    game.combat.spawn(224, -195, true);
     game.police.heat = 2;
-    game.police.spawn(186, 61);
-    placeCamera([198, 5, 110], [194, 1.65, 76]);
-    game.hud.message('LENA / SV-9 ready. Watch the armored guard.');
+    game.police.spawn(220, -150);
+    placeCamera([232, 6, -150], [230, 2, -195]);
+    game.hud.message('LENA / DMR ready. Watch the armored guard.');
   }
 
-  // Settle one frame, then (for the mission shot) fire the sniper once so
+  // Settle one frame, then (for the mission shot) fire the DMR once so
   // the tracer and hit marker are in the frame.
   game.vehicles.update(0);
   game.weapons.update(0);

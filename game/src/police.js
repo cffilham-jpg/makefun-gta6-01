@@ -82,7 +82,8 @@ export class Police {
     const active = this.cars.filter((car) => car.active && car.hp > 0);
     // Keep the pressure up: spawn another cruiser every few seconds.
     if (this.spawnTimer <= 0 && active.length < Math.min(6, this.stars + 1)) {
-      this.spawnTimer = 5;
+      // Four and five stars bring the next cruiser twice as fast.
+      this.spawnTimer = this.stars >= 4 ? 3 : 5;
       const p = game.player.p;
       const road = game.city.roads.reduce((a, b) =>
         Math.abs(b - p.x) < Math.abs(a - p.x) ? b : a

@@ -3,10 +3,18 @@
 // speed, health, wheels and (for police) light bars — shared by the
 // traffic AI, the police chases and the player's driving. Stealing a car
 // (E near one) is a crime; crashing one hard enough earns heat too.
+// Seven types: the sedan, coupe, SUV and pickup of the first version, plus
+// a fast muscle car with a hood scoop and spoiler and a tough boxy van.
 import * as THREE from 'three';
 import { addBox, addCylinder, clamp, groundDistance, burst } from './utils.js';
 
-export const TYPES = ['sedan', 'coupe', 'SUV', 'pickup', 'police'];
+export const TYPES = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'police'];
+
+// The types parked around the city (police cruisers are never parked).
+export const PARKED = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van'];
+
+// Top speed in m/s per type (anything unlisted drives at 43).
+export const TOP_SPEEDS = { coupe: 52, muscle: 58, van: 38, police: 46 };
 
 export class Vehicles {
   constructor(game) {
@@ -16,31 +24,53 @@ export class Vehicles {
     for (let i = 0; i < 27; i++) {
       const x = [-7, 57, 121, 185, -71][i % 5];
       const z = -180 + Math.floor(i / 5) * 64 + (i % 3) * 7;
-      this.spawn(TYPES[i % 4], x, z, Math.PI, paints[i % 5]);
+      this.spawn(PARKED[i % PARKED.length], x, z, Math.PI, paints[i % 5]);
     }
     // Danny's first ride, parked beside the safehouse.
     this.spawn('coupe', 4, 30, Math.PI, '#e39b52');
   }
 
   // Assemble a car from boxes: body, cabin, glass, wheels, lights. Police
-  // cruisers get a roof bar with red and blue flashers.
+  // cruisers get a roof bar with red and blue flashers, muscle cars a hood
+  // scoop and a rear spoiler, vans a tall boxy cabin and a roof rack.
   spawn(type, x, z, angle = 0, color = '#82aaa2') {
     const game = this.game;
     const group = new THREE.Group();
     const isSuv = type === 'SUV';
     const isPickup = type === 'pickup';
+    const isMuscle = type === 'muscle';
+    const isVan = type === 'van';
     const isCop = type === 'police';
-    const length = type === 'coupe' ? 4.8 : 5.4;
-    addBox(group, 2.4, 0.65, length, isCop ? '#e6e5d8' : color, 0, 0.9, 0);
+    const length = type === 'coupe' ? 4.8 : isMuscle ? 5.2 : isVan ? 5.6 : 5.4;
+    const bodyH = isVan ? 0.9 : 0.65;
+    const bodyY = isVan ? 1.0 : 0.9;
+    addBox(group, isVan ? 2.5 : 2.4, bodyH, length, isCop ? '#e6e5d8' : color, 0, bodyY, 0);
     addBox(group, 2.25, 0.3, length - 0.2, isCop ? '#1b303c' : color, 0, 1.25, 0);
-    addBox(group, 1.95, isSuv ? 1.1 : 0.85, isPickup ? 1.8 : 2.55, isCop ? '#e8e7dc' : color, 0, 1.75, isPickup ? 0.5 : 0);
+    const cabinW = isVan ? 2.2 : 1.95;
+    const cabinH = isVan ? 1.5 : isSuv ? 1.1 : 0.85;
+    const cabinLen = isVan ? 3.4 : isPickup ? 1.8 : 2.55;
+    const cabinY = isVan ? 2.0 : 1.75;
+    addBox(group, cabinW, cabinH, cabinLen, isCop ? '#e8e7dc' : color, 0, cabinY, isPickup ? 0.5 : 0);
     const glass = new THREE.MeshStandardMaterial({ color: '#254954', metalness: 0.6, roughness: 0.2 });
-    addBox(group, 1.8, 0.65, 0.08, glass, 0, 1.78, 1.3);
-    addBox(group, 1.8, 0.6, 0.08, glass, 0, 1.78, -1.3);
+    const glassY = isVan ? 2.05 : 1.78;
+    const glassZ = isVan ? 1.9 : 1.3;
+    addBox(group, 1.8, 0.65, 0.08, glass, 0, glassY, glassZ);
+    addBox(group, 1.8, 0.6, 0.08, glass, 0, glassY, -glassZ);
     for (const side of [-1, 1]) {
-      addBox(group, 0.04, 0.6, 2.1, glass, side * 0.99, 1.78, 0);
+      addBox(group, 0.04, 0.6, isVan ? 3.0 : 2.1, glass, side * 0.99, glassY, 0);
       addBox(group, 0.05, 0.75, 0.1, color, side * 1.02, 1.75, 0);
       addBox(group, 0.15, 0.16, 0.5, '#c3c8b9', side * 1.25, 1.45, 0.85);
+    }
+    if (isMuscle) {
+      // Hood scoop and a rear spoiler on struts.
+      addBox(group, 0.9, 0.2, 1.3, '#1a272d', 0, 1.35, 1.3);
+      addBox(group, 0.08, 0.3, 0.3, '#1a272d', -0.8, 1.55, -length / 2 + 0.3);
+      addBox(group, 0.08, 0.3, 0.3, '#1a272d', 0.8, 1.55, -length / 2 + 0.3);
+      addBox(group, 2.0, 0.08, 0.55, '#1a272d', 0, 1.75, -length / 2 + 0.3);
+    }
+    if (isVan) {
+      addBox(group, 1.6, 0.12, 2.6, '#3a4a4d', 0, 2.82, 0);
+      addBox(group, 2.3, 0.18, 0.1, '#2c3f45', 0, 1.5, length / 2 + 0.02);
     }
     const wheels = [];
     for (const a of [-1.15, 1.15]) {
@@ -74,13 +104,15 @@ export class Vehicles {
     group.position.set(x, 0, z);
     group.rotation.y = angle;
     game.scene.add(group);
+    const maxHp = isVan ? 140 : 100;
     const car = {
       mesh: group,
       type,
       p: group.position,
       angle,
       speed: 0,
-      hp: 100,
+      hp: maxHp,
+      maxHp,
       wheels,
       lights,
       ai: false,
@@ -144,7 +176,7 @@ export class Vehicles {
       const throttle = (input.down('KeyW') ? 1 : 0) - (input.down('KeyS') ? 1 : 0);
       car.speed += throttle * 21 * dt;
       car.speed *= Math.pow(input.down('Space') ? 0.08 : 0.965, dt * 10);
-      car.speed = clamp(car.speed, -15, car.type === 'coupe' ? 52 : 43);
+      car.speed = clamp(car.speed, -15, TOP_SPEEDS[car.type] || 43);
       const steer = (input.down('KeyA') ? 1 : 0) - (input.down('KeyD') ? 1 : 0);
       car.angle += steer * clamp(car.speed / 12, -1, 1) * dt * (input.down('Space') ? 2.2 : 1.1);
       const old = car.p.clone();

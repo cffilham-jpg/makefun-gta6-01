@@ -53,9 +53,11 @@ export class Audio {
       pistol: [180, 0.12, 0.5],
       smg: [250, 0.07, 0.35],
       shotgun: [50, 0.3, 0.8],
+      rifle: [220, 0.09, 0.4],
+      dmr: [90, 0.35, 0.7],
     }[kind];
     this.tone(profile[0], profile[1], 'sawtooth', profile[2]);
-    if (kind === 'sniper') this.tone(900, 0.08, 'square', 0.5);
+    if (kind === 'sniper' || kind === 'dmr') this.tone(900, 0.08, 'square', 0.5);
   }
 
   // Keep the engine hum in step with the driven car's speed (0 = silent).

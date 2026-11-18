@@ -2,7 +2,8 @@
 // startup from a seeded generator so the same seed replays the same city.
 // Seven avenues cross seven streets; the blocks between them hold buildings
 // with canvas-painted windows, a downtown cluster, palms, lamps, a beach,
-// a boardwalk, a marina with sailboats, and the Reyes Auto safehouse.
+// a boardwalk, a marina with sailboats, the Reyes Auto safehouse, and the
+// striped Lighthouse Point tower with its rotating beacon.
 // Every building registers a solid footprint the player and cars collide
 // with. Static boxes are merged into instanced batches per material so the
 // renderer stays fast.
@@ -26,10 +27,13 @@ export class City {
     this.buildBlocks(scene, rng);
     this.buildPalmsAndLamps(scene, rng);
     this.buildCoast(scene, rng);
+    this.buildLighthouse(scene);
     this.buildSafehouse(scene);
     addSign(scene, 'SOLMERE / MARINA', 209, 5, 63, 16);
     addSign(scene, 'PALM AVENUE', -1, 7, -70, 14);
     addSign(scene, 'CIELO HOTEL', -54, 15, 14, 16);
+    addSign(scene, 'LIGHTHOUSE POINT', 232, 9, -192, 16);
+    addSign(scene, 'NORTH COAST', 205, 6, -180, 14);
     this.buildSky(scene);
     this.mergeStaticBoxes();
   }
@@ -134,6 +138,53 @@ export class City {
       addCylinder(scene, 2.5, 2.5, 0.2, buoyColors[Math.abs(z) % 3], 232, 2, z);
       addCylinder(scene, 0.07, 0.07, 2, '#c9a276', 232, 1, z);
     }
+  }
+
+  // Lighthouse Point: a striped tower with a rotating beacon at the
+  // south end of the beach. The beam is a child of the beacon group, so
+  // the static-box merge never touches it.
+  buildLighthouse(scene) {
+    const tower = new THREE.Group();
+    tower.position.set(232, 0, -205);
+    const bands = ['#f2ead8', '#d96a55', '#f2ead8', '#d96a55', '#f2ead8'];
+    bands.forEach((color, i) => {
+      const band = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.3 - i * 0.12, 2.4 - i * 0.12, 3.6, 12),
+        sharedMaterial(color)
+      );
+      band.position.y = 1.8 + i * 3.6;
+      band.castShadow = true;
+      tower.add(band);
+    });
+    const lampRoom = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.5, 1.5, 2.2, 10),
+      new THREE.MeshStandardMaterial({
+        color: '#ffd98d',
+        emissive: '#ffcf6e',
+        emissiveIntensity: 0.9,
+      })
+    );
+    lampRoom.position.y = 19;
+    tower.add(lampRoom);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(1.9, 1.6, 10), sharedMaterial('#31444d'));
+    cap.position.y = 20.8;
+    tower.add(cap);
+    this.beacon = new THREE.Group();
+    this.beacon.position.y = 19;
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.7, 55),
+      new THREE.MeshBasicMaterial({ color: '#fff2a8', transparent: true, opacity: 0.22, depthWrite: false })
+    );
+    beam.position.z = 27.5;
+    this.beacon.add(beam);
+    tower.add(this.beacon);
+    scene.add(tower);
+    this.solids.push({ x: 232, z: -205, w: 3, d: 3, h: 20 });
+  }
+
+  // Sweep the lighthouse beam around the coast.
+  update(dt) {
+    if (this.beacon) this.beacon.rotation.y += dt * 0.45;
   }
 
   // Golden-hour sky dome and a low sun.

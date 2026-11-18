@@ -1,7 +1,10 @@
 // Save games live in localStorage under one versioned key: cash, the story
-// chapter reached, the player's position, unlocked vehicle types and the
-// weapons the player has earned. Everything is validated on load so a
-// corrupt or foreign save can never break the game.
+// chapter reached, the player's position, unlocked vehicle types, the
+// weapons the player has earned, and the Sun Coins already collected.
+// Everything is validated on load so a corrupt or foreign save can never
+// break the game.
+import { STORY } from './missions.js';
+
 const SAVE_KEY = 'solmere-heat-v1';
 
 // Read the saved game, or null when there is none (or it is not ours).
@@ -28,6 +31,9 @@ export function save(game) {
         weapons: game.weapons.list
           .filter((weapon) => weapon.unlocked)
           .map((weapon) => weapon.id),
+        coins: game.collectibles.coins
+          .map((coin, i) => (coin.taken ? i : -1))
+          .filter((i) => i >= 0),
       })
     );
     game.hud.message('Progress saved • Solmere remembers');
@@ -40,7 +46,7 @@ export function save(game) {
 // lands inside a building (the player respawns at the safehouse instead).
 export function restore(game, data) {
   game.player.cash = Number.isFinite(data.cash) ? data.cash : 250;
-  game.missions.index = Math.min(5, Math.max(0, data.mission || 0));
+  game.missions.index = Math.min(STORY.length, Math.max(0, data.mission || 0));
   if (Array.isArray(data.position) && data.position.every(Number.isFinite)) {
     game.player.p.fromArray(data.position);
     if (game.city.blocked(game.player.p.x, game.player.p.z)) {
@@ -50,5 +56,15 @@ export function restore(game, data) {
   game.unlocked = Array.isArray(data.unlocked) ? data.unlocked : [];
   for (const weapon of game.weapons.list) {
     if (data.weapons?.includes(weapon.id)) weapon.unlocked = true;
+  }
+  if (Array.isArray(data.coins)) {
+    for (const i of data.coins) {
+      const coin = game.collectibles.coins[i];
+      if (coin) {
+        coin.taken = true;
+        coin.mesh.visible = false;
+        coin.ring.visible = false;
+      }
+    }
   }
 }

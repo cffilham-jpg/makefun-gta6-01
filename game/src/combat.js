@@ -12,17 +12,21 @@ export class Combat {
     this.enemies = [];
     this.pickups = [];
     this.punchTimer = 0;
-    // The gold weapon crate by the safehouse holds the SV-9 Deadeye.
+    // The gold weapon crate by the safehouse holds the SV-9 Deadeye; the
+    // steel-blue crate at the marina holds the Kestrel DMR.
     this.crate(-12, 30, 'weapon');
+    this.crate(208, 60, 'dmr');
     for (const [x, z] of [[-12, -35], [77, 12], [178, -53], [-75, 138]]) {
       this.crate(x, z, 'ammo');
       this.crate(x + 4, z, 'health');
     }
   }
 
-  // Place a pickup crate: gold for a weapon, green for health, grey for ammo.
+  // Place a pickup crate: gold for a weapon, steel blue for the DMR,
+  // green for health, grey for ammo.
   crate(x, z, type) {
-    const color = type === 'weapon' ? '#e0af54' : type === 'health' ? '#70b9a0' : '#a3b1b0';
+    const color =
+      type === 'weapon' ? '#e0af54' : type === 'dmr' ? '#8fb8d8' : type === 'health' ? '#70b9a0' : '#a3b1b0';
     const mesh = addBox(this.game.scene, 1.2, 0.8, 1, color, x, 0.6, z);
     addBox(mesh, 1.24, 0.12, 1.04, '#e6dab0', 0, 0.3, 0);
     this.pickups.push({ mesh, p: mesh.position, type, used: false, respawn: 0 });
@@ -131,6 +135,9 @@ export class Combat {
         if (pickup.type === 'weapon') {
           game.weapons.unlock();
           game.weapons.switch(3);
+        } else if (pickup.type === 'dmr') {
+          game.weapons.unlockById('dmr');
+          game.weapons.switch(5);
         } else if (pickup.type === 'health') {
           game.player.hp = Math.min(100, game.player.hp + 40);
           game.hud.message('Health +40');

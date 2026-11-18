@@ -12,8 +12,9 @@ import { Vehicles } from './vehicles.js';
 import { Traffic } from './traffic.js';
 import { Pedestrians } from './pedestrians.js';
 import { Police } from './police.js';
-import { Missions } from './missions.js';
+import { Missions, STORY } from './missions.js';
 import { Combat } from './combat.js';
+import { Collectibles } from './collectibles.js';
 import { Weapons } from './weapons.js';
 import { HUD } from './hud.js';
 import { Audio } from './audio.js';
@@ -65,6 +66,7 @@ class SolmereHeat {
     this.vehicles = new Vehicles(this);
     this.traffic = new Traffic(this);
     this.pedestrians = new Pedestrians(this);
+    this.collectibles = new Collectibles(this);
     this.police = new Police(this);
     this.missions = new Missions(this);
     this.weapons = new Weapons(this);
@@ -128,7 +130,7 @@ class SolmereHeat {
             this.resetRun();
             restore(this, stored);
             this.resume();
-            if (this.missions.index < 5) this.hud.message('J • continue the next chapter');
+            if (this.missions.index < STORY.length) this.hud.message('J • continue the next chapter');
           },
           !stored,
         ],
@@ -143,7 +145,7 @@ class SolmereHeat {
     this.showOverlay(
       'FIELD GUIDE / SOLMERE',
       'YOUR CITY. YOUR RULES.',
-      'WASD move / drive · Mouse look (click to lock)\nE enter / exit · Shift sprint · Space jump / handbrake\nLeft mouse fire · F punch · R reload · 1–4 / wheel switch\nHold RMB: SV-9 sniper scope · M mute · Esc pause\nFind the gold rifle crate by Reyes Auto, west of your first car.\nGreen garage clears heat. J starts the next story chapter.\nHealth and ammo crates are scattered through the city.',
+      'WASD move / drive · Mouse look (click to lock)\nE enter / exit · Shift sprint · Space jump / handbrake\nLeft mouse fire · F punch · R reload · 1–6 / wheel switch\nHold RMB: scope (SV-9 sniper, Kestrel DMR) · M mute · Esc pause\nFind the gold rifle crate by Reyes Auto, west of your first car.\nThe steel-blue crate at the marina holds the Kestrel DMR.\nGreen garage clears heat. J starts the next story chapter.\n12 Sun Coins hide around Solmere — all of them pay +$2,000.\nHealth and ammo crates are scattered through the city.',
       [['Back', () => this.startMenu()]]
     );
   }
@@ -169,19 +171,21 @@ class SolmereHeat {
     this.missions.target = null;
     this.missions.marker.visible = false;
     this.missions.timer = 0;
+    this.missions.foes = [];
+    this.collectibles.reset();
     this.weapons.index = 0;
     this.weapons.reloadLeft = 0;
     this.weapons.scoped = false;
     this.weapons.list.forEach((weapon, i) => {
       weapon.ammo = weapon.mag;
-      weapon.reserve = i === 0 ? 180 : i === 1 ? 240 : i === 2 ? 48 : 25;
-      weapon.unlocked = i < 3;
+      weapon.reserve = [180, 240, 48, 25, 300, 40][i];
+      weapon.unlocked = i !== 3 && i !== 5;
     });
     for (const enemy of this.combat.enemies) this.scene.remove(enemy.mesh);
     this.combat.enemies = [];
     this.unlocked = [];
     this.vehicles.all.forEach((car) => {
-      car.hp = 100;
+      car.hp = car.maxHp;
       car.speed = 0;
       car.stolen = false;
     });
@@ -262,10 +266,12 @@ class SolmereHeat {
   update(dt) {
     this.time += dt;
     this.shake = Math.max(0, this.shake - dt * 2);
+    this.city.update(dt);
     this.player.update(dt);
     this.vehicles.update(dt);
     this.traffic.update(dt);
     this.pedestrians.update(dt);
+    this.collectibles.update(dt);
     this.police.update(dt);
     if (this.mode !== 'play') return;
     this.weapons.update(dt);

@@ -96,6 +96,13 @@ header {
   letter-spacing: 2px;
 }
 
+#coins {
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #ffd977;
+  margin-top: 4px;
+}
+
 /* Objective banner, centred at the top. */
 #objective {
   position: absolute;

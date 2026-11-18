@@ -1,10 +1,11 @@
-// The arsenal: four weapons with distinct feels, plus the aiming, firing
-// and feedback around them. The flagship is the SV-9 Deadeye sniper —
+// The arsenal: six weapons with distinct feels, plus the aiming, firing
+// and feedback around them. The flagships are the SV-9 Deadeye sniper —
 // hold the right mouse button to look down its scope (the field of view
 // narrows and a reticle overlay appears), one shot drops a regular enemy,
-// and headshots pay a bonus. Every shot is a raycast from the camera with
-// per-weapon spread; buildings stop bullets, tracers show the path, and a
-// hit marker confirms each hit.
+// and headshots pay a bonus — and the Kestrel DMR, a scoped marksman
+// rifle that rewards a steady hand at range. Every shot is a raycast from
+// the camera with per-weapon spread; buildings stop bullets, tracers show
+// the path, and a hit marker confirms each hit.
 import * as THREE from 'three';
 import { addBox, addCylinder, burst, clamp } from './utils.js';
 
@@ -12,8 +13,13 @@ export const DEFINITIONS = [
   { id: 'pistol', name: 'Marlow P12', icon: '▰━', damage: 34, rate: 0.27, mag: 12, reserve: 180, reload: 1.05, range: 100, spread: 0.004, pellets: 1, unlocked: true },
   { id: 'smg', name: 'Vela M8 SMG', icon: '▰╦━', damage: 16, rate: 0.075, mag: 30, reserve: 240, reload: 1.65, range: 65, spread: 0.026, pellets: 1, unlocked: true },
   { id: 'shotgun', name: 'Breaker S6', icon: '▰━━━━', damage: 24, rate: 0.9, mag: 6, reserve: 48, reload: 2.1, range: 28, spread: 0.075, pellets: 9, unlocked: true },
-  { id: 'sniper', name: 'SV-9 DEADEYE', icon: '━▰━╋━━', damage: 150, rate: 1.25, mag: 5, reserve: 25, reload: 2.7, range: 600, spread: 0, pellets: 1, unlocked: false },
+  { id: 'sniper', name: 'SV-9 DEADEYE', icon: '━▰━╋━━', damage: 150, rate: 1.25, mag: 5, reserve: 25, reload: 2.7, range: 600, spread: 0, pellets: 1, unlocked: false, hint: 'collect the crate at Reyes Auto or complete The Pickup' },
+  { id: 'rifle', name: 'Falcon AR-7', icon: '▰━╦━', damage: 22, rate: 0.11, mag: 30, reserve: 300, reload: 1.9, range: 120, spread: 0.012, pellets: 1, unlocked: true },
+  { id: 'dmr', name: 'Kestrel DMR', icon: '━▰╋━━', damage: 85, rate: 0.7, mag: 8, reserve: 40, reload: 2.4, range: 400, spread: 0.001, pellets: 1, unlocked: false, hint: 'collect the crate at the marina or complete Night Run' },
 ];
+
+// The scoped weapons: aiming down their sights narrows the field of view.
+export const SCOPED = ['sniper', 'dmr'];
 
 export class Weapons {
   constructor(game) {
@@ -42,13 +48,15 @@ export class Weapons {
     return this.list[this.index];
   }
 
-  // Equip a weapon by index (wraps around). The sniper stays locked until
-  // it is earned.
+  // Equip a weapon by index (wraps around). Locked weapons stay locked
+  // until they are earned, and the message says how to earn them.
   switch(index) {
-    if (index < 0) index = 3;
-    if (index > 3) index = 0;
-    if (!this.list[index].unlocked) {
-      this.game.hud.message('SV-9 locked • collect the crate at Reyes Auto or complete The Pickup');
+    const count = this.list.length;
+    if (index < 0) index = count - 1;
+    if (index >= count) index = 0;
+    const weapon = this.list[index];
+    if (!weapon.unlocked) {
+      this.game.hud.message(weapon.name + ' locked • ' + (weapon.hint || 'earn it in the story'));
       return;
     }
     this.index = index;
@@ -61,6 +69,16 @@ export class Weapons {
   unlock() {
     this.list[3].unlocked = true;
     this.game.hud.message('SV-9 DEADEYE acquired • 4 equip / hold right mouse to scope');
+  }
+
+  // Earn a weapon by id (the DMR comes from the Night Run reward or the
+  // marina crate).
+  unlockById(id) {
+    const at = this.list.findIndex((weapon) => weapon.id === id);
+    if (at < 0 || this.list[at].unlocked) return;
+    this.list[at].unlocked = true;
+    const scoped = SCOPED.includes(id) ? ' / hold right mouse to scope' : '';
+    this.game.hud.message(this.list[at].name + ' acquired • ' + (at + 1) + ' equip' + scoped);
   }
 
   // Start a reload (fills the magazine from the reserve when it finishes).
@@ -77,19 +95,19 @@ export class Weapons {
     const weapon = this.current;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.hitTime = Math.max(0, this.hitTime - dt);
-    for (let n = 0; n < 4; n++) {
+    for (let n = 0; n < this.list.length; n++) {
       if (input.tap('Digit' + (n + 1))) this.switch(n);
     }
     if (input.wheel) {
       let next = this.index;
       do {
-        next = (next + input.wheel + 4) % 4;
+        next = (next + input.wheel + this.list.length) % this.list.length;
       } while (!this.list[next].unlocked);
       this.switch(next);
     }
-    // Scoped only on foot, aiming, sniper equipped, not reloading.
+    // Scoped only on foot, aiming, a scoped weapon equipped, not reloading.
     this.scoped =
-      !game.player.car && input.aim && this.current.id === 'sniper' && !this.reloadLeft;
+      !game.player.car && input.aim && SCOPED.includes(this.current.id) && !this.reloadLeft;
     if (input.tap('KeyR')) this.reload();
     if (this.reloadLeft > 0) {
       this.reloadLeft -= dt;
@@ -125,9 +143,9 @@ export class Weapons {
       player.p.z - Math.sin(yaw) * 0.48
     );
     this.model.rotation.y = yaw;
-    this.model.rotation.x = this.current.id === 'sniper' ? -0.05 : -0.2;
+    this.model.rotation.x = SCOPED.includes(this.current.id) ? -0.05 : -0.2;
     this.model.scale.setScalar(this.current.id === 'pistol' ? 0.45 : 1);
-    this.scope.visible = this.current.id === 'sniper';
+    this.scope.visible = SCOPED.includes(this.current.id);
     document.getElementById('scope').classList.toggle('active', this.scoped);
   }
 
@@ -142,9 +160,10 @@ export class Weapons {
     this.cooldown = weapon.rate;
     this.shotsFired++;
     game.audio.shot(weapon.id);
-    game.police.crime(weapon.id === 'sniper' ? 1.3 : 0.35);
+    game.police.crime(weapon.id === 'sniper' ? 1.3 : weapon.id === 'dmr' ? 0.8 : 0.35);
     game.pedestrians.scare(game.player.p, 70);
-    game.shake = weapon.id === 'sniper' ? 0.23 : weapon.id === 'shotgun' ? 0.3 : 0.07;
+    game.shake =
+      weapon.id === 'sniper' ? 0.23 : weapon.id === 'shotgun' ? 0.3 : weapon.id === 'dmr' ? 0.18 : 0.07;
     this.lastHits = [];
 
     const origin = game.camera.position.clone();
@@ -210,7 +229,7 @@ export class Weapons {
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([muzzle, end]),
         new THREE.LineBasicMaterial({
-          color: weapon.id === 'sniper' ? '#ffe5a1' : '#ffc85a',
+          color: SCOPED.includes(weapon.id) ? '#ffe5a1' : '#ffc85a',
           transparent: true,
           opacity: 0.9,
         })
@@ -220,7 +239,7 @@ export class Weapons {
     }
     // Muzzle flash.
     const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(weapon.id === 'sniper' ? 0.22 : 0.15, 6, 6),
+      new THREE.SphereGeometry(SCOPED.includes(weapon.id) ? 0.22 : 0.15, 6, 6),
       new THREE.MeshBasicMaterial({ color: '#fff2a8' })
     );
     flash.position

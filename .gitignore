@@ -1,0 +1,3 @@
+# Screenshot intermediates: tools/shots.mjs captures PNGs, then converts
+# them to the JPEGs the dossier holds. Only the JPEGs are committed.
+screenshots/*.png

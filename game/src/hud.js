@@ -1,8 +1,9 @@
-// The heads-up display: cash, wanted stars, health, the mission objective,
-// the weapon readout, the message feed and the canvas minimap. update()
-// runs every frame and pushes the live game state into the DOM elements
-// index.html defines; minimap() redraws the little map around the player
-// (roads, buildings, the coast, the garage, the mission marker, police).
+// The heads-up display: cash, wanted stars, health, the Sun Coin count,
+// the mission objective, the weapon readout, the message feed and the
+// canvas minimap. update() runs every frame and pushes the live game
+// state into the DOM elements index.html defines; minimap() redraws the
+// little map around the player (roads, buildings, the coast, the garage,
+// the mission marker, police, and the Sun Coins still out there).
 import { clamp } from './utils.js';
 import { STORY } from './missions.js';
 
@@ -36,6 +37,7 @@ export class HUD {
       })
     );
     $('cash').textContent = '$' + Math.floor(player.cash).toLocaleString();
+    $('coins').textContent = '☀ ' + game.collectibles.collected + '/' + game.collectibles.total;
     $('stars').textContent = '★'.repeat(game.police.stars) + '☆'.repeat(5 - game.police.stars);
     $('heatstate').textContent = game.police.stars
       ? game.police.unseen > 2
@@ -50,14 +52,23 @@ export class HUD {
     $('objectiveText').textContent = missions.objective;
     $('timer').textContent = missions.active && missions.timer > 0 ? Math.ceil(missions.timer) + 's' : '';
     $('district').textContent =
-      (player.p.x > 180 ? 'SOLMERE COAST' : player.p.z < 0 ? 'MERIDIAN / DOWNTOWN' : 'PALM AVENUE') +
-      ' / 18:42';
+      (player.p.x > 180
+        ? player.p.z < -170
+          ? 'LIGHTHOUSE POINT'
+          : 'SOLMERE COAST'
+        : player.p.z < 0
+          ? 'MERIDIAN / DOWNTOWN'
+          : 'PALM AVENUE') + ' / 18:42';
     $('speed').style.display = player.car ? 'block' : 'none';
     if (player.car) {
       $('speed').querySelector('strong').textContent = Math.round(Math.abs(player.car.speed) * 3.6)
         .toString()
         .padStart(3, '0');
-      $('carName').textContent = player.car.type.toUpperCase() + ' / ' + Math.round(player.car.hp) + '% CONDITION';
+      $('carName').textContent =
+        player.car.type.toUpperCase() +
+        ' / ' +
+        Math.round((player.car.hp / player.car.maxHp) * 100) +
+        '% CONDITION';
     }
     $('weaponName').textContent = weapon.name;
     $('weaponIcon').textContent = weapon.icon;
@@ -65,9 +76,11 @@ export class HUD {
     $('reload').textContent =
       game.weapons.reloadLeft > 0
         ? 'RELOADING ' + game.weapons.reloadLeft.toFixed(1) + 's'
-        : weapon.id === 'sniper'
-          ? '4 / HOLD RMB TO SCOPE'
-          : '1 PISTOL · 2 SMG · 3 SHOTGUN · 4 RIFLE';
+        : weapon.id === 'sniper' || weapon.id === 'dmr'
+          ? 'HOLD RMB TO SCOPE'
+          : '1–6 SWITCH · WHEEL CYCLE';
+    $('scopeData').innerHTML =
+      weapon.id === 'dmr' ? 'KESTREL / DMR<br>4× MARKSMAN OPTIC' : 'SV-9 / DEADEYE<br>6× PRECISION OPTIC';
     $('hitmarker').textContent = game.weapons.hitTime > 0 ? '×' : '';
     $('hitmarker').className = game.weapons.hitKind;
     $('hitfeedback').textContent = game.weapons.hitTime > 0 ? game.weapons.feedback : '';
@@ -119,6 +132,15 @@ export class HUD {
       ctx.beginPath();
       ctx.arc(toX(car.p.x), toZ(car.p.z), 3, 0, 7);
       ctx.fill();
+    }
+    // Sun Coins still out there, as gold dots.
+    ctx.fillStyle = '#ffd977';
+    for (const coin of game.collectibles.coins) {
+      if (coin.taken) continue;
+      const x = toX(coin.p.x);
+      const z = toZ(coin.p.z);
+      if (x < 0 || x > 200 || z < 0 || z > 180) continue;
+      ctx.fillRect(x - 2, z - 2, 4, 4);
     }
     // The player arrow, rotated to the heading.
     ctx.save();
