@@ -1,10 +1,11 @@
-// Danny Reyes' story: nine chapters, each with its own job, told through
+// Danny Reyes' story: twelve chapters, each with its own job, told through
 // Lena's briefings. A glowing waypoint beam marks the objective in the
 // world and on the minimap; finishing a chapter pays cash and (after
-// chapter 2) unlocks the SV-9 Deadeye sniper, while chapter 7 unlocks the
-// Kestrel DMR. J starts the next chapter; the garage clears the heat
-// between jobs. Chapters that hinge on a firefight track their own guards
-// in this.foes, so only those guards gate the next stage.
+// chapter 2) unlocks the SV-9 Deadeye sniper, chapter 7 unlocks the
+// Kestrel DMR, and chapter 10 unlocks the Tempest LMG. J starts the next
+// chapter; the garage clears the heat between jobs. Chapters that hinge
+// on a firefight track their own guards in this.foes, so only those
+// guards gate the next stage.
 import * as THREE from 'three';
 import { groundDistance } from './utils.js';
 
@@ -53,6 +54,21 @@ export const STORY = [
     name: 'Solmere Sunrise',
     voice: 'Lena: One last job. The exchange, the case, the dawn. Then we are free.',
     reward: 8000,
+  },
+  {
+    name: 'The Vault Job',
+    voice: 'Lena: The Meridian Bank vault is unguarded at dusk. Crack it, take the loot, bring it home.',
+    reward: 6000,
+  },
+  {
+    name: 'Turf War',
+    voice: 'Lena: The Vipers took the south exchange. Take it back — every last one of them.',
+    reward: 7000,
+  },
+  {
+    name: 'The Last Stand',
+    voice: 'Lena: The Vipers’ final play is at the marina. End it, then run for the lighthouse.',
+    reward: 12000,
   },
 ];
 
@@ -110,6 +126,8 @@ export class Missions {
       this.game.hud.message('Story complete • the city is yours');
       return;
     }
+    // A story chapter takes over from any race in progress.
+    this.game.races.cancel('Race abandoned • a story chapter took over');
     this.active = true;
     this.stage = 0;
     this.timer = 0;
@@ -166,6 +184,32 @@ export class Missions {
         this.game.combat.spawn(58, -196),
         this.game.combat.spawn(70, -198),
       ];
+    } else if (this.index === 9) {
+      this.waypoint(64, -64, 'THE VAULT JOB • reach the Meridian Bank vault');
+      this.foes = [
+        this.game.combat.spawn(60, -60),
+        this.game.combat.spawn(68, -62, true),
+        this.game.combat.spawn(64, -70),
+      ];
+    } else if (this.index === 10) {
+      this.waypoint(128, 128, 'TURF WAR • take the south exchange from the Vipers');
+      this.foes = [
+        this.game.combat.spawn(124, 124),
+        this.game.combat.spawn(132, 126, true),
+        this.game.combat.spawn(128, 134),
+        this.game.combat.spawn(120, 130),
+        this.game.combat.spawn(136, 132),
+      ];
+    } else if (this.index === 11) {
+      this.waypoint(195, 75, 'THE LAST STAND • the Vipers’ final play at the marina');
+      this.foes = [
+        this.game.combat.spawn(190, 70),
+        this.game.combat.spawn(200, 72, true),
+        this.game.combat.spawn(195, 82),
+        this.game.combat.spawn(188, 80),
+        this.game.combat.spawn(202, 78),
+        this.game.combat.spawn(193, 68, true),
+      ];
     }
   }
 
@@ -175,6 +219,7 @@ export class Missions {
     this.game.player.cash += chapter.reward;
     if (this.index === 1) this.game.weapons.unlock();
     if (this.index === 6) this.game.weapons.unlockById('dmr');
+    if (this.index === 9) this.game.weapons.unlockById('lmg');
     this.index++;
     this.active = false;
     this.marker.visible = false;
@@ -193,7 +238,9 @@ export class Missions {
           ? 'SV-9 Deadeye unlocked'
           : this.index === 7
             ? 'Kestrel DMR unlocked'
-            : 'Danny’s reputation grows'),
+            : this.index === 10
+              ? 'Tempest LMG unlocked'
+              : 'Danny’s reputation grows'),
       [
         [
           'Continue',
@@ -338,6 +385,72 @@ export class Missions {
       ) {
         game.police.clear();
         this.complete();
+      }
+    } else if (chapter === 9) {
+      // The Vault Job: reach the bank, clear the vault guards, then
+      // deliver the loot to the garage under three stars.
+      if (this.stage === 0 && this.target && groundDistance(game.player.p, this.target) < 16) {
+        this.stage = 1;
+        this.marker.visible = false;
+        this.target = null;
+        this.objective = 'THE VAULT JOB • clear the vault guards';
+      } else if (this.stage === 1 && this.foes.every((foe) => foe.hp <= 0)) {
+        this.stage = 2;
+        game.police.heat = 3;
+        this.waypoint(-21, 40, 'THE VAULT JOB • deliver the loot to Reyes Auto');
+        game.hud.message('Vault cracked • $6,000 in the bag');
+      } else if (
+        this.stage === 2 &&
+        this.target &&
+        game.player.car &&
+        groundDistance(game.player.p, this.target) < 14
+      ) {
+        game.police.clear();
+        this.complete();
+      }
+    } else if (chapter === 10) {
+      // Turf War: take the south exchange, clear all five Vipers, then
+      // lose four stars at the garage.
+      if (this.stage === 0 && this.target && groundDistance(game.player.p, this.target) < 16) {
+        this.stage = 1;
+        this.marker.visible = false;
+        this.target = null;
+        this.objective = 'TURF WAR • clear the Vipers from the south exchange';
+      } else if (this.stage === 1 && this.foes.every((foe) => foe.hp <= 0)) {
+        this.stage = 2;
+        game.police.heat = 4;
+        this.waypoint(-21, 40, 'TURF WAR • lose the heat at Reyes Auto');
+        game.hud.message('Exchange taken • four stars, run for the garage');
+      } else if (
+        this.stage === 2 &&
+        this.target &&
+        game.player.car &&
+        groundDistance(game.player.p, this.target) < 14
+      ) {
+        game.police.clear();
+        this.complete();
+      }
+    } else if (chapter === 11) {
+      // The Last Stand: clear six Vipers at the marina, then a 90-second
+      // escape to Lighthouse Point under four stars.
+      if (this.stage === 0 && this.target && groundDistance(game.player.p, this.target) < 16) {
+        this.stage = 1;
+        this.marker.visible = false;
+        this.target = null;
+        this.objective = 'THE LAST STAND • clear the Vipers at the marina';
+      } else if (this.stage === 1 && this.foes.every((foe) => foe.hp <= 0)) {
+        this.stage = 2;
+        this.timer = 90;
+        game.police.heat = 4;
+        this.waypoint(228, -190, 'THE LAST STAND • escape to Lighthouse Point in 90s');
+        game.hud.message('It’s over • run for the lighthouse');
+      } else if (this.stage === 2) {
+        this.timer -= dt;
+        game.police.heat = Math.max(4, game.police.heat);
+        if (this.timer <= 0) this.fail('The Vipers caught up before the lighthouse.');
+        else if (game.player.car && this.target && groundDistance(game.player.p, this.target) < 15) {
+          this.complete();
+        }
       }
     }
   }

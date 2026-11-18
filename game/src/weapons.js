@@ -1,11 +1,14 @@
-// The arsenal: six weapons with distinct feels, plus the aiming, firing
+// The arsenal: seven weapons with distinct feels, plus the aiming, firing
 // and feedback around them. The flagships are the SV-9 Deadeye sniper —
 // hold the right mouse button to look down its scope (the field of view
 // narrows and a reticle overlay appears), one shot drops a regular enemy,
 // and headshots pay a bonus — and the Kestrel DMR, a scoped marksman
-// rifle that rewards a steady hand at range. Every shot is a raycast from
-// the camera with per-weapon spread; buildings stop bullets, tracers show
-// the path, and a hit marker confirms each hit.
+// rifle that rewards a steady hand at range. The Tempest LMG is the
+// heavy option: a 60-round belt, the fastest sustained fire in the game,
+// earned in The Vault Job (chapter 10) or from the black crate on North
+// Avenue. Every shot is a raycast from the camera with per-weapon spread;
+// buildings stop bullets, tracers show the path, and a hit marker
+// confirms each hit.
 import * as THREE from 'three';
 import { addBox, addCylinder, burst, clamp } from './utils.js';
 
@@ -16,6 +19,7 @@ export const DEFINITIONS = [
   { id: 'sniper', name: 'SV-9 DEADEYE', icon: '━▰━╋━━', damage: 150, rate: 1.25, mag: 5, reserve: 25, reload: 2.7, range: 600, spread: 0, pellets: 1, unlocked: false, hint: 'collect the crate at Reyes Auto or complete The Pickup' },
   { id: 'rifle', name: 'Falcon AR-7', icon: '▰━╦━', damage: 22, rate: 0.11, mag: 30, reserve: 300, reload: 1.9, range: 120, spread: 0.012, pellets: 1, unlocked: true },
   { id: 'dmr', name: 'Kestrel DMR', icon: '━▰╋━━', damage: 85, rate: 0.7, mag: 8, reserve: 40, reload: 2.4, range: 400, spread: 0.001, pellets: 1, unlocked: false, hint: 'collect the crate at the marina or complete Night Run' },
+  { id: 'lmg', name: 'Tempest LMG', icon: '▰━━━╦', damage: 26, rate: 0.1, mag: 60, reserve: 240, reload: 3.0, range: 140, spread: 0.018, pellets: 1, unlocked: false, hint: 'complete The Vault Job or find the black crate on North Avenue' },
 ];
 
 // The scoped weapons: aiming down their sights narrows the field of view.
@@ -163,7 +167,7 @@ export class Weapons {
     game.police.crime(weapon.id === 'sniper' ? 1.3 : weapon.id === 'dmr' ? 0.8 : 0.35);
     game.pedestrians.scare(game.player.p, 70);
     game.shake =
-      weapon.id === 'sniper' ? 0.23 : weapon.id === 'shotgun' ? 0.3 : weapon.id === 'dmr' ? 0.18 : 0.07;
+      weapon.id === 'sniper' ? 0.23 : weapon.id === 'shotgun' ? 0.3 : weapon.id === 'dmr' ? 0.18 : weapon.id === 'lmg' ? 0.12 : 0.07;
     this.lastHits = [];
 
     const origin = game.camera.position.clone();

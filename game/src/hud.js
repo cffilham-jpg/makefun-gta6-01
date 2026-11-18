@@ -1,9 +1,10 @@
 // The heads-up display: cash, wanted stars, health, the Sun Coin count,
-// the mission objective, the weapon readout, the message feed and the
-// canvas minimap. update() runs every frame and pushes the live game
-// state into the DOM elements index.html defines; minimap() redraws the
-// little map around the player (roads, buildings, the coast, the garage,
-// the mission marker, police, and the Sun Coins still out there).
+// the mission objective, the race timer, the weapon readout, the message
+// feed and the canvas minimap. update() runs every frame and pushes the
+// live game state into the DOM elements index.html defines; minimap()
+// redraws the little map around the player (roads, buildings, the coast,
+// the garage, the mission marker, the race checkpoints, police, and the
+// Sun Coins still out there).
 import { clamp } from './utils.js';
 import { STORY } from './missions.js';
 
@@ -47,10 +48,14 @@ export class HUD {
     $('healthFill').style.width = player.hp + '%';
     $('healthText').textContent = 'HEALTH ' + Math.ceil(player.hp);
     $('chapter').textContent = missions.active
-      ? 'CHAPTER 0' + (missions.index + 1) + ' / ' + STORY[missions.index].name.toUpperCase()
+      ? 'CHAPTER ' + String(missions.index + 1).padStart(2, '0') + ' / ' + STORY[missions.index].name.toUpperCase()
       : 'DANNY REYES / FREE ROAM';
     $('objectiveText').textContent = missions.objective;
-    $('timer').textContent = missions.active && missions.timer > 0 ? Math.ceil(missions.timer) + 's' : '';
+    $('timer').textContent = game.races.active
+      ? game.races.timeText()
+      : missions.active && missions.timer > 0
+        ? Math.ceil(missions.timer) + 's'
+        : '';
     $('district').textContent =
       (player.p.x > 180
         ? player.p.z < -170
@@ -78,7 +83,7 @@ export class HUD {
         ? 'RELOADING ' + game.weapons.reloadLeft.toFixed(1) + 's'
         : weapon.id === 'sniper' || weapon.id === 'dmr'
           ? 'HOLD RMB TO SCOPE'
-          : '1–6 SWITCH · WHEEL CYCLE';
+          : '1–7 SWITCH · WHEEL CYCLE';
     $('scopeData').innerHTML =
       weapon.id === 'dmr' ? 'KESTREL / DMR<br>4× MARKSMAN OPTIC' : 'SV-9 / DEADEYE<br>6× PRECISION OPTIC';
     $('hitmarker').textContent = game.weapons.hitTime > 0 ? '×' : '';
@@ -132,6 +137,34 @@ export class HUD {
       ctx.beginPath();
       ctx.arc(toX(car.p.x), toZ(car.p.z), 3, 0, 7);
       ctx.fill();
+    }
+    // Street races: the next checkpoint as a cyan diamond, the rest as
+    // small cyan dots — and the start rings while no race is running.
+    if (game.races.active && game.races.route) {
+      const route = game.races.route;
+      ctx.fillStyle = '#7fe8e0';
+      route.checkpoints.forEach(([x, z], i) => {
+        if (i < game.races.gate) return;
+        const px = clamp(toX(x), 6, 194);
+        const pz = clamp(toZ(z), 6, 174);
+        if (i === game.races.gate) {
+          ctx.save();
+          ctx.translate(px, pz);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillRect(-4, -4, 8, 8);
+          ctx.restore();
+        } else {
+          ctx.fillRect(px - 2, pz - 2, 4, 4);
+        }
+      });
+    } else {
+      ctx.fillStyle = '#bdf5ef';
+      for (const route of game.races.routes || []) {
+        const x = toX(route.start[0]);
+        const z = toZ(route.start[1]);
+        if (x < 0 || x > 200 || z < 0 || z > 180) continue;
+        ctx.fillRect(x - 3, z - 3, 6, 6);
+      }
     }
     // Sun Coins still out there, as gold dots.
     ctx.fillStyle = '#ffd977';

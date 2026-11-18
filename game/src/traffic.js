@@ -6,14 +6,14 @@ export class Traffic {
   constructor(game) {
     this.game = game;
     this.cars = [];
-    const bodies = ['sedan', 'SUV', 'coupe', 'van', 'muscle'];
+    const bodies = ['sedan', 'SUV', 'coupe', 'van', 'muscle', 'motorcycle'];
     const paints = ['#c07863', '#ddd3b6', '#679aa0'];
     for (let i = 0; i < 18; i++) {
       // Alternate east-west and north-south traffic across the road grid.
       const eastWest = i % 2 === 1;
       const lane = game.city.roads[(i * 3) % 7];
       const car = game.vehicles.spawn(
-        bodies[i % 3],
+        bodies[i % bodies.length],
         eastWest ? -180 + i * 18 : lane + 4,
         eastWest ? lane - 4 : -180 + i * 19,
         eastWest ? Math.PI / 2 : 0,

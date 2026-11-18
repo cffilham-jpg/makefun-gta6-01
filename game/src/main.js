@@ -15,6 +15,7 @@ import { Police } from './police.js';
 import { Missions, STORY } from './missions.js';
 import { Combat } from './combat.js';
 import { Collectibles } from './collectibles.js';
+import { Races } from './races.js';
 import { Weapons } from './weapons.js';
 import { HUD } from './hud.js';
 import { Audio } from './audio.js';
@@ -67,6 +68,7 @@ class SolmereHeat {
     this.traffic = new Traffic(this);
     this.pedestrians = new Pedestrians(this);
     this.collectibles = new Collectibles(this);
+    this.races = new Races(this);
     this.police = new Police(this);
     this.missions = new Missions(this);
     this.weapons = new Weapons(this);
@@ -145,7 +147,7 @@ class SolmereHeat {
     this.showOverlay(
       'FIELD GUIDE / SOLMERE',
       'YOUR CITY. YOUR RULES.',
-      'WASD move / drive · Mouse look (click to lock)\nE enter / exit · Shift sprint · Space jump / handbrake\nLeft mouse fire · F punch · R reload · 1–6 / wheel switch\nHold RMB: scope (SV-9 sniper, Kestrel DMR) · M mute · Esc pause\nFind the gold rifle crate by Reyes Auto, west of your first car.\nThe steel-blue crate at the marina holds the Kestrel DMR.\nGreen garage clears heat. J starts the next story chapter.\n12 Sun Coins hide around Solmere — all of them pay +$2,000.\nHealth and ammo crates are scattered through the city.',
+      'WASD move / drive · Mouse look (click to lock)\nE enter / exit · Shift sprint · Space jump / handbrake\nLeft mouse fire · F punch · R reload · 1–7 / wheel switch\nHold RMB: scope (SV-9 sniper, Kestrel DMR) · M mute · Esc pause\nFind the gold rifle crate by Reyes Auto, west of your first car.\nThe steel-blue crate at the marina holds the Kestrel DMR.\nThe black crate on North Avenue holds the Tempest LMG.\nGreen garage clears heat. J starts the next story chapter.\n12 Sun Coins hide around Solmere — all of them pay +$2,000.\n3 street races: drive into a checkered start ring to race the clock —\nbeat the target time for cash. Best times are saved.\nHealth and ammo crates are scattered through the city.',
       [['Back', () => this.startMenu()]]
     );
   }
@@ -161,6 +163,7 @@ class SolmereHeat {
     this.player.pitch = 0.05;
     this.player.invulnerable = 3;
     this.police.clear();
+    this.races.reset();
     this.shotCamera = null;
   }
 
@@ -173,13 +176,14 @@ class SolmereHeat {
     this.missions.timer = 0;
     this.missions.foes = [];
     this.collectibles.reset();
+    this.races.reset();
     this.weapons.index = 0;
     this.weapons.reloadLeft = 0;
     this.weapons.scoped = false;
     this.weapons.list.forEach((weapon, i) => {
       weapon.ammo = weapon.mag;
-      weapon.reserve = [180, 240, 48, 25, 300, 40][i];
-      weapon.unlocked = i !== 3 && i !== 5;
+      weapon.reserve = [180, 240, 48, 25, 300, 40, 240][i];
+      weapon.unlocked = i !== 3 && i !== 5 && i !== 6;
     });
     for (const enemy of this.combat.enemies) this.scene.remove(enemy.mesh);
     this.combat.enemies = [];
@@ -272,6 +276,7 @@ class SolmereHeat {
     this.traffic.update(dt);
     this.pedestrians.update(dt);
     this.collectibles.update(dt);
+    this.races.update(dt);
     this.police.update(dt);
     if (this.mode !== 'play') return;
     this.weapons.update(dt);

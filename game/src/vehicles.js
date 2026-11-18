@@ -3,18 +3,26 @@
 // speed, health, wheels and (for police) light bars — shared by the
 // traffic AI, the police chases and the player's driving. Stealing a car
 // (E near one) is a crime; crashing one hard enough earns heat too.
-// Seven types: the sedan, coupe, SUV and pickup of the first version, plus
-// a fast muscle car with a hood scoop and spoiler and a tough boxy van.
+// Eight types: the sedan, coupe, SUV and pickup of the first version, the
+// fast muscle car with a hood scoop and spoiler and the tough boxy van of
+// the second, and the motorcycle of the third — the fastest ride in
+// Solmere, fragile, and quickest through a corner.
 import * as THREE from 'three';
 import { addBox, addCylinder, clamp, groundDistance, burst } from './utils.js';
 
-export const TYPES = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'police'];
+export const TYPES = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'motorcycle', 'police'];
 
 // The types parked around the city (police cruisers are never parked).
-export const PARKED = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van'];
+export const PARKED = ['sedan', 'coupe', 'SUV', 'pickup', 'muscle', 'van', 'motorcycle'];
 
 // Top speed in m/s per type (anything unlisted drives at 43).
-export const TOP_SPEEDS = { coupe: 52, muscle: 58, van: 38, police: 46 };
+export const TOP_SPEEDS = { coupe: 52, muscle: 58, van: 38, police: 46, motorcycle: 62 };
+
+// Throttle in m/s^2 per type (anything unlisted accelerates at 21).
+export const ACCELERATION = { motorcycle: 28 };
+
+// Steering multiplier per type (anything unlisted steers at 1x).
+export const HANDLING = { motorcycle: 1.5 };
 
 export class Vehicles {
   constructor(game) {
@@ -32,7 +40,8 @@ export class Vehicles {
 
   // Assemble a car from boxes: body, cabin, glass, wheels, lights. Police
   // cruisers get a roof bar with red and blue flashers, muscle cars a hood
-  // scoop and a rear spoiler, vans a tall boxy cabin and a roof rack.
+  // scoop and a rear spoiler, vans a tall boxy cabin and a roof rack, and
+  // motorcycles a narrow frame with two wheels in line.
   spawn(type, x, z, angle = 0, color = '#82aaa2') {
     const game = this.game;
     const group = new THREE.Group();
@@ -41,58 +50,78 @@ export class Vehicles {
     const isMuscle = type === 'muscle';
     const isVan = type === 'van';
     const isCop = type === 'police';
-    const length = type === 'coupe' ? 4.8 : isMuscle ? 5.2 : isVan ? 5.6 : 5.4;
-    const bodyH = isVan ? 0.9 : 0.65;
-    const bodyY = isVan ? 1.0 : 0.9;
-    addBox(group, isVan ? 2.5 : 2.4, bodyH, length, isCop ? '#e6e5d8' : color, 0, bodyY, 0);
-    addBox(group, 2.25, 0.3, length - 0.2, isCop ? '#1b303c' : color, 0, 1.25, 0);
-    const cabinW = isVan ? 2.2 : 1.95;
-    const cabinH = isVan ? 1.5 : isSuv ? 1.1 : 0.85;
-    const cabinLen = isVan ? 3.4 : isPickup ? 1.8 : 2.55;
-    const cabinY = isVan ? 2.0 : 1.75;
-    addBox(group, cabinW, cabinH, cabinLen, isCop ? '#e8e7dc' : color, 0, cabinY, isPickup ? 0.5 : 0);
-    const glass = new THREE.MeshStandardMaterial({ color: '#254954', metalness: 0.6, roughness: 0.2 });
-    const glassY = isVan ? 2.05 : 1.78;
-    const glassZ = isVan ? 1.9 : 1.3;
-    addBox(group, 1.8, 0.65, 0.08, glass, 0, glassY, glassZ);
-    addBox(group, 1.8, 0.6, 0.08, glass, 0, glassY, -glassZ);
-    for (const side of [-1, 1]) {
-      addBox(group, 0.04, 0.6, isVan ? 3.0 : 2.1, glass, side * 0.99, glassY, 0);
-      addBox(group, 0.05, 0.75, 0.1, color, side * 1.02, 1.75, 0);
-      addBox(group, 0.15, 0.16, 0.5, '#c3c8b9', side * 1.25, 1.45, 0.85);
-    }
-    if (isMuscle) {
-      // Hood scoop and a rear spoiler on struts.
-      addBox(group, 0.9, 0.2, 1.3, '#1a272d', 0, 1.35, 1.3);
-      addBox(group, 0.08, 0.3, 0.3, '#1a272d', -0.8, 1.55, -length / 2 + 0.3);
-      addBox(group, 0.08, 0.3, 0.3, '#1a272d', 0.8, 1.55, -length / 2 + 0.3);
-      addBox(group, 2.0, 0.08, 0.55, '#1a272d', 0, 1.75, -length / 2 + 0.3);
-    }
-    if (isVan) {
-      addBox(group, 1.6, 0.12, 2.6, '#3a4a4d', 0, 2.82, 0);
-      addBox(group, 2.3, 0.18, 0.1, '#2c3f45', 0, 1.5, length / 2 + 0.02);
-    }
+    const isBike = type === 'motorcycle';
     const wheels = [];
-    for (const a of [-1.15, 1.15]) {
-      for (const b of [-1.7, 1.7]) {
-        const tire = addCylinder(group, 0.48, 0.48, 0.34, '#243139', a, 0.56, b, 12);
+    if (isBike) {
+      // A motorcycle: narrow frame, fuel tank, seat, handlebar, front
+      // fork and two wheels in line. The fastest ride in Solmere.
+      addBox(group, 0.5, 0.35, 2.3, color, 0, 0.75, 0);
+      addBox(group, 0.42, 0.3, 0.7, color, 0, 1.0, 0.35);
+      addBox(group, 0.4, 0.14, 0.9, '#1c2428', 0, 0.98, -0.55);
+      addBox(group, 0.85, 0.07, 0.07, '#243139', 0, 1.15, 0.95);
+      const fork = addCylinder(group, 0.05, 0.05, 0.9, '#a6b1b1', 0, 0.75, 1.05, 6);
+      fork.rotation.x = 0.35;
+      addBox(group, 0.3, 0.14, 0.05, '#ffedb4', 0, 0.95, 1.2);
+      for (const b of [-0.85, 0.85]) {
+        const tire = addCylinder(group, 0.38, 0.38, 0.16, '#243139', 0, 0.42, b, 12);
         tire.rotation.z = Math.PI / 2;
         wheels.push(tire);
-        const hub = addCylinder(group, 0.24, 0.24, 0.36, '#a6b1b1', a, 0.56, b, 8);
+        const hub = addCylinder(group, 0.18, 0.18, 0.18, '#a6b1b1', 0, 0.42, b, 8);
         hub.rotation.z = Math.PI / 2;
       }
+    } else {
+      const length = type === 'coupe' ? 4.8 : isMuscle ? 5.2 : isVan ? 5.6 : 5.4;
+      const bodyH = isVan ? 0.9 : 0.65;
+      const bodyY = isVan ? 1.0 : 0.9;
+      addBox(group, isVan ? 2.5 : 2.4, bodyH, length, isCop ? '#e6e5d8' : color, 0, bodyY, 0);
+      addBox(group, 2.25, 0.3, length - 0.2, isCop ? '#1b303c' : color, 0, 1.25, 0);
+      const cabinW = isVan ? 2.2 : 1.95;
+      const cabinH = isVan ? 1.5 : isSuv ? 1.1 : 0.85;
+      const cabinLen = isVan ? 3.4 : isPickup ? 1.8 : 2.55;
+      const cabinY = isVan ? 2.0 : 1.75;
+      addBox(group, cabinW, cabinH, cabinLen, isCop ? '#e8e7dc' : color, 0, cabinY, isPickup ? 0.5 : 0);
+      const glass = new THREE.MeshStandardMaterial({ color: '#254954', metalness: 0.6, roughness: 0.2 });
+      const glassY = isVan ? 2.05 : 1.78;
+      const glassZ = isVan ? 1.9 : 1.3;
+      addBox(group, 1.8, 0.65, 0.08, glass, 0, glassY, glassZ);
+      addBox(group, 1.8, 0.6, 0.08, glass, 0, glassY, -glassZ);
+      for (const side of [-1, 1]) {
+        addBox(group, 0.04, 0.6, isVan ? 3.0 : 2.1, glass, side * 0.99, glassY, 0);
+        addBox(group, 0.05, 0.75, 0.1, color, side * 1.02, 1.75, 0);
+        addBox(group, 0.15, 0.16, 0.5, '#c3c8b9', side * 1.25, 1.45, 0.85);
+      }
+      if (isMuscle) {
+        // Hood scoop and a rear spoiler on struts.
+        addBox(group, 0.9, 0.2, 1.3, '#1a272d', 0, 1.35, 1.3);
+        addBox(group, 0.08, 0.3, 0.3, '#1a272d', -0.8, 1.55, -length / 2 + 0.3);
+        addBox(group, 0.08, 0.3, 0.3, '#1a272d', 0.8, 1.55, -length / 2 + 0.3);
+        addBox(group, 2.0, 0.08, 0.55, '#1a272d', 0, 1.75, -length / 2 + 0.3);
+      }
+      if (isVan) {
+        addBox(group, 1.6, 0.12, 2.6, '#3a4a4d', 0, 2.82, 0);
+        addBox(group, 2.3, 0.18, 0.1, '#2c3f45', 0, 1.5, length / 2 + 0.02);
+      }
+      for (const a of [-1.15, 1.15]) {
+        for (const b of [-1.7, 1.7]) {
+          const tire = addCylinder(group, 0.48, 0.48, 0.34, '#243139', a, 0.56, b, 12);
+          tire.rotation.z = Math.PI / 2;
+          wheels.push(tire);
+          const hub = addCylinder(group, 0.24, 0.24, 0.36, '#a6b1b1', a, 0.56, b, 8);
+          hub.rotation.z = Math.PI / 2;
+        }
+      }
+      for (const a of [-0.78, 0.78]) {
+        const headlight = new THREE.MeshStandardMaterial({
+          color: '#ffedb4',
+          emissive: '#eabd6d',
+          emissiveIntensity: 0.5,
+        });
+        addBox(group, 0.55, 0.18, 0.08, headlight, a, 1, length / 2 + 0.02);
+        addBox(group, 0.55, 0.18, 0.08, '#c84e42', a, 1, -length / 2 - 0.02);
+      }
+      addBox(group, 2, 0.18, 0.15, '#a7aca4', 0, 0.65, -length / 2);
+      if (isPickup) addBox(group, 1.7, 0.12, 1.5, '#34474b', 0, 1.32, -1.55);
     }
-    for (const a of [-0.78, 0.78]) {
-      const headlight = new THREE.MeshStandardMaterial({
-        color: '#ffedb4',
-        emissive: '#eabd6d',
-        emissiveIntensity: 0.5,
-      });
-      addBox(group, 0.55, 0.18, 0.08, headlight, a, 1, length / 2 + 0.02);
-      addBox(group, 0.55, 0.18, 0.08, '#c84e42', a, 1, -length / 2 - 0.02);
-    }
-    addBox(group, 2, 0.18, 0.15, '#a7aca4', 0, 0.65, -length / 2);
-    if (isPickup) addBox(group, 1.7, 0.12, 1.5, '#34474b', 0, 1.32, -1.55);
     let lights = [];
     if (isCop) {
       addBox(group, 1.6, 0.12, 0.42, '#1b2833', 0, 2.25, 0);
@@ -104,7 +133,7 @@ export class Vehicles {
     group.position.set(x, 0, z);
     group.rotation.y = angle;
     game.scene.add(group);
-    const maxHp = isVan ? 140 : 100;
+    const maxHp = isVan ? 140 : isBike ? 60 : 100;
     const car = {
       mesh: group,
       type,
@@ -174,11 +203,12 @@ export class Vehicles {
     if (car) {
       const input = game.input;
       const throttle = (input.down('KeyW') ? 1 : 0) - (input.down('KeyS') ? 1 : 0);
-      car.speed += throttle * 21 * dt;
+      car.speed += throttle * (ACCELERATION[car.type] || 21) * dt;
       car.speed *= Math.pow(input.down('Space') ? 0.08 : 0.965, dt * 10);
       car.speed = clamp(car.speed, -15, TOP_SPEEDS[car.type] || 43);
       const steer = (input.down('KeyA') ? 1 : 0) - (input.down('KeyD') ? 1 : 0);
-      car.angle += steer * clamp(car.speed / 12, -1, 1) * dt * (input.down('Space') ? 2.2 : 1.1);
+      car.angle +=
+        steer * clamp(car.speed / 12, -1, 1) * dt * (input.down('Space') ? 2.2 : 1.1) * (HANDLING[car.type] || 1);
       const old = car.p.clone();
       car.p.x += Math.sin(car.angle) * car.speed * dt;
       car.p.z += Math.cos(car.angle) * car.speed * dt;

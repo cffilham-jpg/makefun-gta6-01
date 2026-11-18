@@ -1,8 +1,8 @@
-// CDP play-test for Solmere Heat v2: serves game/, drives it in headless
+// CDP play-test for Solmere Heat v3: serves game/, drives it in headless
 // Chromium over the DevTools protocol, and checks the game end to end:
-// menus, driving, all six weapons, the nine story chapters, the Sun Coins,
-// the lighthouse, saves, the four screenshot scenes, and zero console
-// errors or network requests outside localhost.
+// menus, driving, all seven weapons, the twelve story chapters, the Sun
+// Coins, the street races, the lighthouse, saves, the four screenshot
+// scenes, and zero console errors or network requests outside localhost.
 // Usage: node tools/playtest.mjs [--port 8091]
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -105,12 +105,12 @@ async function check(name, fn) {
 const VK = {
   KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, KeyE: 69, KeyJ: 74, KeyR: 82,
   KeyF: 70, KeyM: 77, Space: 32, Escape: 27, ShiftLeft: 16,
-  Digit1: 49, Digit2: 50, Digit3: 51, Digit4: 52, Digit5: 53, Digit6: 54,
+  Digit1: 49, Digit2: 50, Digit3: 51, Digit4: 52, Digit5: 53, Digit6: 54, Digit7: 55,
 };
 const KEY = {
   KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyE: 'e', KeyJ: 'j', KeyR: 'r',
   KeyF: 'f', KeyM: 'm', Space: ' ', Escape: 'Escape', ShiftLeft: 'Shift',
-  Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6',
+  Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6', Digit7: '7',
 };
 
 let cdp;
@@ -262,11 +262,11 @@ async function main() {
     await evaluate('window.game.player.invulnerable = 99999');
 
     // --- Arsenal ---
-    await check('six weapons', async () => evaluate('window.game.weapons.list.length === 6'));
+    await check('seven weapons', async () => evaluate('window.game.weapons.list.length === 7'));
     await check('weapon ids in order', async () =>
-      evaluate(`JSON.stringify(window.game.weapons.list.map((w) => w.id)) === '["pistol","smg","shotgun","sniper","rifle","dmr"]'`));
-    await check('rifle unlocked, dmr locked at start', async () =>
-      evaluate('window.game.weapons.list[4].unlocked === true && window.game.weapons.list[5].unlocked === false'));
+      evaluate(`JSON.stringify(window.game.weapons.list.map((w) => w.id)) === '["pistol","smg","shotgun","sniper","rifle","dmr","lmg"]'`));
+    await check('rifle unlocked, dmr and lmg locked at start', async () =>
+      evaluate('window.game.weapons.list[4].unlocked === true && window.game.weapons.list[5].unlocked === false && window.game.weapons.list[6].unlocked === false'));
     await check('Digit5 equips the rifle', async () => {
       await keyTap('Digit5');
       return evaluate('window.game.weapons.current.id === "rifle"');
@@ -286,6 +286,22 @@ async function main() {
       const after = await evaluate('window.game.weapons.shotsFired');
       const ammo = await evaluate('window.game.weapons.current.ammo');
       return after === before + 1 && ammo === 7;
+    });
+    await check('Digit7 blocked while lmg locked', async () => {
+      await keyTap('Digit7');
+      return evaluate('window.game.weapons.current.id === "dmr"');
+    });
+    await check('unlockById + Digit7 equips the lmg', async () => {
+      await evaluate(`window.game.weapons.unlockById('lmg')`);
+      await keyTap('Digit7');
+      return evaluate('window.game.weapons.current.id === "lmg"');
+    });
+    await check('lmg fires: shot counted, ammo spent', async () => {
+      const before = await evaluate('window.game.weapons.shotsFired');
+      await evaluate('window.game.weapons.cooldown = 0; window.game.weapons.fire()');
+      const after = await evaluate('window.game.weapons.shotsFired');
+      const ammo = await evaluate('window.game.weapons.current.ammo');
+      return after === before + 1 && ammo === 59;
     });
     await check('mouse wheel cycles weapons', async () => {
       await keyTap('Digit1');
@@ -310,16 +326,18 @@ async function main() {
     });
 
     // --- Vehicles ---
-    await check('fleet includes muscle and van types', async () =>
+    await check('fleet includes muscle, van and motorcycle types', async () =>
       evaluate(
-        `(() => { const t = new Set(window.game.vehicles.all.map((c) => c.type)); return t.has('muscle') && t.has('van'); })()`
+        `(() => { const t = new Set(window.game.vehicles.all.map((c) => c.type)); return t.has('muscle') && t.has('van') && t.has('motorcycle'); })()`
       ));
-    await check('at least 2 muscle and 2 van parked', async () =>
+    await check('at least 2 muscle, 2 van and 2 motorcycles parked', async () =>
       evaluate(
-        `(() => { const all = window.game.vehicles.all; return all.filter((c) => c.type === 'muscle').length >= 2 && all.filter((c) => c.type === 'van').length >= 2; })()`
+        `(() => { const all = window.game.vehicles.all; return all.filter((c) => c.type === 'muscle').length >= 2 && all.filter((c) => c.type === 'van').length >= 2 && all.filter((c) => c.type === 'motorcycle').length >= 2; })()`
       ));
     await check('van has 140 max hp', async () =>
       evaluate(`window.game.vehicles.all.find((c) => c.type === 'van').maxHp === 140`));
+    await check('motorcycle has 60 max hp', async () =>
+      evaluate(`window.game.vehicles.all.find((c) => c.type === 'motorcycle').maxHp === 60`));
     await check('E enters the nearest car', async () => enterNearestCar());
     await check('holding W accelerates the car', async () => {
       // Put the car on the empty x=0 road first (the coupe spawns beside
@@ -361,6 +379,15 @@ async function main() {
       const speed = await evaluate('Math.abs(window.game.player.car.speed)');
       console.log('    van speed after clamp: ' + speed);
       return speed > 28 && speed <= 38.5;
+    });
+    await check('motorcycle top speed clamps at 62', async () => {
+      await evaluate(
+        `(() => { const g = window.game; const old = g.player.car; if (old) { old.p.set(-200, 0, -200); old.speed = 0; } const b = g.vehicles.all.find((c) => c.type === 'motorcycle'); g.player.car = null; g.player.mesh.visible = true; g.vehicles.enter(b, true); b.p.set(0, 0, 180); b.angle = Math.PI; b.speed = 100; g.player.p.copy(b.p); })()`
+      );
+      await sleep(500);
+      const speed = await evaluate('Math.abs(window.game.player.car.speed)');
+      console.log('    motorcycle speed after clamp: ' + speed);
+      return speed > 45 && speed <= 62.5;
     });
     await check('E exits the car when slow', async () => {
       await evaluate('window.game.player.car.speed = 0');
@@ -446,13 +473,112 @@ async function main() {
       await teleportPlayer(-128, 128);
       return waitFor('window.game.missions.stage === 3', 10000);
     });
-    await check('chapter 9 completes the story', async () => {
+    await check('chapter 9 advances the story', async () => {
       if (!(await enterNearestCar())) return false;
       if (!(await teleportCar(-21, 38))) return false;
       const done = await waitFor('window.game.missions.index === 9', 10000);
       await clickButton('Free roam');
       await sleep(300);
       return done;
+    });
+
+    // --- Story: chapter 10 (The Vault Job) ---
+    await check('chapter 10 begins with 3 foes', async () => {
+      await evaluate('window.game.police.clear()');
+      await startChapter(9);
+      return evaluate('window.game.missions.foes.length === 3');
+    });
+    await check('chapter 10 reaches the vault', async () => {
+      await teleportPlayer(64, -64);
+      return waitFor('window.game.missions.stage === 1', 10000);
+    });
+    await check('chapter 10 advances once the guards fall', async () => {
+      await evaluate('window.game.missions.foes.forEach((f) => window.game.combat.damage(f, 999))');
+      return waitFor('window.game.missions.stage === 2', 10000);
+    });
+    await check('chapter 10 completes and unlocks the LMG', async () => {
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(-21, 38))) return false;
+      const done = await waitFor('window.game.missions.index === 10', 10000);
+      const lmg = await evaluate('window.game.weapons.list[6].unlocked === true');
+      await clickButton('Free roam');
+      await sleep(300);
+      return done && lmg;
+    });
+
+    // --- Story: chapter 11 (Turf War) ---
+    await check('chapter 11 begins with 5 foes', async () => {
+      await evaluate('window.game.police.clear()');
+      await startChapter(10);
+      return evaluate('window.game.missions.foes.length === 5');
+    });
+    await check('chapter 11 reaches the south exchange', async () => {
+      await teleportPlayer(128, 128);
+      return waitFor('window.game.missions.stage === 1', 10000);
+    });
+    await check('chapter 11 advances once the Vipers fall', async () => {
+      await evaluate('window.game.missions.foes.forEach((f) => window.game.combat.damage(f, 999))');
+      return waitFor('window.game.missions.stage === 2', 10000);
+    });
+    await check('chapter 11 completes at the garage', async () => {
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(-21, 38))) return false;
+      const done = await waitFor('window.game.missions.index === 11', 10000);
+      await clickButton('Free roam');
+      await sleep(300);
+      return done;
+    });
+
+    // --- Story: chapter 12 (The Last Stand) ---
+    await check('chapter 12 begins with 6 foes', async () => {
+      await evaluate('window.game.police.clear()');
+      await startChapter(11);
+      return evaluate('window.game.missions.foes.length === 6');
+    });
+    await check('chapter 12 reaches the marina', async () => {
+      await teleportPlayer(195, 75);
+      return waitFor('window.game.missions.stage === 1', 10000);
+    });
+    await check('chapter 12 advances once the Vipers fall', async () => {
+      await evaluate('window.game.missions.foes.forEach((f) => window.game.combat.damage(f, 999))');
+      return waitFor('window.game.missions.stage === 2 && window.game.missions.timer > 80', 10000);
+    });
+    await check('chapter 12 completes the story', async () => {
+      if (!(await enterNearestCar())) return false;
+      if (!(await teleportCar(228, -190))) return false;
+      const done = await waitFor('window.game.missions.index === 12', 10000);
+      await clickButton('Free roam');
+      await sleep(300);
+      return done;
+    });
+
+    // --- Street races ---
+    await check('three race routes exist', async () => evaluate('window.game.races.routes.length === 3'));
+    let raceCashBefore = 0;
+    await check('race starts at the Palm Sprint ring', async () => {
+      if (!(await enterNearestCar())) return false;
+      raceCashBefore = await evaluate('window.game.player.cash');
+      if (!(await teleportCar(0, 192))) return false;
+      return waitFor(`window.game.races.active === true && window.game.races.route.id === 'palm'`, 10000);
+    });
+    await check('HUD timer shows the race clock', async () =>
+      evaluate(`document.getElementById('timer').textContent.includes(':')`));
+    await check('race advances through checkpoints', async () => {
+      for (const [x, z] of [[0, 128], [0, 64], [0, 0]]) {
+        if (!(await teleportCar(x, z))) return false;
+      }
+      return waitFor('window.game.races.gate === 3', 10000);
+    });
+    await check('race finishes and pays the prize', async () => {
+      for (const [x, z] of [[0, -64], [0, -128], [0, -192]]) {
+        if (!(await teleportCar(x, z))) return false;
+      }
+      const done = await waitFor(
+        'window.game.races.active === false && window.game.races.best.palm !== undefined',
+        10000
+      );
+      const cash = await evaluate('window.game.player.cash');
+      return done && cash >= raceCashBefore + 1500;
     });
 
     // --- Collectibles ---
@@ -487,11 +613,11 @@ async function main() {
     });
 
     // --- Save ---
-    await check('save persists coins and chapter', async () => {
+    await check('save persists coins, chapter and race bests', async () => {
       await evaluate('window.game.persist()');
       const count = await evaluate('window.game.collectibles.collected');
       return evaluate(
-        `(() => { const d = JSON.parse(localStorage.getItem('solmere-heat-v1')); return d && d.mission === 9 && Array.isArray(d.coins) && d.coins.length === ${count}; })()`
+        `(() => { const d = JSON.parse(localStorage.getItem('solmere-heat-v1')); return d && d.mission === 12 && Array.isArray(d.coins) && d.coins.length === ${count} && d.races && typeof d.races.palm === 'number'; })()`
       );
     });
 
